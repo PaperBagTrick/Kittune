@@ -1,0 +1,23 @@
+# Rust build artifacts
+**/target/
+
+# Node/Vite dependencies and build output
+**/node_modules/
+**/dist/
+**/.vite/
+
+# Local SpacetimeDB data, toolchains, logs, and scratch files
+**/work/
+**/outputs/
+*.log
+*.pid
+**/config/id_ecdsa
+**/config/id_ecdsa.pub
+
+# Codex scratch copy from the original setup session
+/files-pasted-by-the-user-you/
+
+# Local environment files
+.env
+.env.*
+!.env.example
