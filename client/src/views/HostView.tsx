@@ -271,10 +271,7 @@ export default function HostView({ onBack }: Props) {
           <div className="lobby-main panel">
             <div className="panel-heading"><span className="panel-kicker">{room.visibility === 'PUBLIC' ? 'PUBLIC ROOM' : 'PRIVATE ROOM'} · ROOM CODE</span><span className="host-status">WAITING FOR PLAYERS</span></div>
             <div className="room-code" aria-label={`Room code ${room.code}`}>{room.code.split('').map((letter, i) => <span key={i}>{letter}</span>)}</div>
-            <p className="lobby-instruction">Join at <strong>kittune.game</strong> or scan to play</p>
-            <div className="qr-placeholder" aria-label="QR code placeholder">
-              <span className="qr-cat">🐈</span><span className="qr-label">SCAN TO JOIN</span>
-            </div>
+            <p className="lobby-instruction">Go to <strong>kittune.game</strong> and enter this room code</p>
             <div className="lobby-actions">
               <button className="button button-secondary" onClick={() => void navigator.clipboard?.writeText(`${location.origin}/?join=${room.code}`)}>Copy invite link</button>
               <button className="button button-primary" onClick={() => void start()} disabled={players.length === 0}>Start Kittune <span>→</span></button>

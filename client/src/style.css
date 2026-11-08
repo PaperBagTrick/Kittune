@@ -69,7 +69,6 @@ button:disabled {
 .target-progress>span,
 .host-footer,
 .guess-footer,
-.qr-label,
 .people-count,
 .form-label,
 .live-pill,
@@ -580,35 +579,6 @@ button:disabled {
 
 .lobby-instruction strong {
     color: #f3effa
-}
-
-.qr-placeholder {
-    width: 112px;
-    height: 112px;
-    margin: 20px auto;
-    display: grid;
-    place-items: center;
-    align-content: center;
-    gap: 5px;
-    background: repeating-conic-gradient(#e8e5ec 0% 25%, #1b1a22 0% 50%) 50% / 14px 14px;
-    border: 8px solid #f0edf5;
-    border-radius: 6px;
-    box-shadow: 0 0 0 1px rgba(0, 0, 0, .3)
-}
-
-.qr-cat {
-    background: #1b1a22;
-    border-radius: 7px;
-    padding: 4px;
-    font-size: 20px
-}
-
-.qr-label {
-    font-size: 7px;
-    letter-spacing: .08em;
-    color: #f1edf6;
-    background: #17161c;
-    padding: 3px 4px
 }
 
 .lobby-actions {
@@ -1967,10 +1937,6 @@ button:disabled {
 
     .room-code {
         margin: 31px 0 10px
-    }
-
-    .qr-placeholder {
-        margin: 15px auto
     }
 
     .lobby-actions {
