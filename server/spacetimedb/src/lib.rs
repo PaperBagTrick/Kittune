@@ -45,10 +45,12 @@ pub struct Player {
     #[index(btree)]
     pub room_code: String,
     pub name: String,
-    pub score: i32,
+    pub score: u32,
+    pub locked_out_this_round: bool,
     #[default(0)]
     pub correct_streak: u32,
-    pub locked_out_this_round: bool,
+    #[default(0)]
+    pub score_delta: i64,
 }
 
 #[spacetimedb::table(accessor = round_state)]
@@ -88,6 +90,16 @@ pub struct RoomView {
 }
 
 #[derive(SpacetimeType)]
+pub struct PlayerView {
+    pub identity: Identity,
+    pub room_code: String,
+    pub name: String,
+    pub score: i64,
+    pub locked_out_this_round: bool,
+    pub correct_streak: u32,
+}
+
+#[derive(SpacetimeType)]
 pub struct RoundView {
     pub room_code: String,
     pub artwork_url: String,
@@ -103,6 +115,12 @@ pub struct HostRoundAudio {
     pub room_code: String,
     pub audio_url: String,
     pub track_id: i64,
+}
+
+#[derive(SpacetimeType)]
+pub struct PlayerRoundAudio {
+    pub room_code: String,
+    pub audio_url: String,
 }
 
 #[spacetimedb::table(accessor = room_cleanup_timer, scheduled(cleanup_stale_rooms))]
@@ -171,6 +189,22 @@ fn room_for_sender(ctx: &ViewContext) -> Option<Room> {
     ctx.db.room().host_identity().filter(ctx.sender()).next()
 }
 
+fn effective_score(player: &Player) -> i64 {
+    i64::from(player.score) + player.score_delta
+}
+
+fn adjust_score(player: &mut Player, change: i64) -> Result<i64, String> {
+    let score_delta = player
+        .score_delta
+        .checked_add(change)
+        .ok_or_else(|| "Score is out of range".to_string())?;
+    let score = i64::from(player.score)
+        .checked_add(score_delta)
+        .ok_or_else(|| "Score is out of range".to_string())?;
+    player.score_delta = score_delta;
+    Ok(score)
+}
+
 #[spacetimedb::view(accessor = public_lobbies, public, primary_key = code)]
 pub fn public_lobbies(ctx: &AnonymousViewContext) -> Vec<PublicLobby> {
     let public_visibility = "PUBLIC".to_string();
@@ -211,9 +245,26 @@ pub fn my_room(ctx: &ViewContext) -> Vec<RoomView> {
 }
 
 #[spacetimedb::view(accessor = players_in_my_room, public, primary_key = identity)]
-pub fn players_in_my_room(ctx: &ViewContext) -> Vec<Player> {
+pub fn players_in_my_room(ctx: &ViewContext) -> Vec<PlayerView> {
     room_for_sender(ctx)
-        .map(|room| ctx.db.player().room_code().filter(&room.code).collect())
+        .map(|room| {
+            ctx.db
+                .player()
+                .room_code()
+                .filter(&room.code)
+                .map(|player| {
+                    let score = effective_score(&player);
+                    PlayerView {
+                        identity: player.identity,
+                        room_code: player.room_code,
+                        name: player.name,
+                        score,
+                        locked_out_this_round: player.locked_out_this_round,
+                        correct_streak: player.correct_streak,
+                    }
+                })
+                .collect()
+        })
         .unwrap_or_default()
 }
 
@@ -342,8 +393,9 @@ fn join_room_as(
         room_code: code,
         name: name.to_string(),
         score: 0,
-        correct_streak: 0,
         locked_out_this_round: false,
+        correct_streak: 0,
+        score_delta: 0,
     });
     Ok(())
 }
@@ -546,6 +598,23 @@ fn expire_guess(ctx: &ReducerContext, room_code: &str) -> Result<(), String> {
     Ok(())
 }
 
+#[spacetimedb::view(accessor = player_round_audio, public, primary_key = room_code)]
+pub fn player_round_audio(ctx: &ViewContext) -> Vec<PlayerRoundAudio> {
+    room_for_sender(ctx)
+        .and_then(|room| {
+            ctx.db
+                .round_state()
+                .room_code()
+                .find(room.code)
+                .map(|state| PlayerRoundAudio {
+                    room_code: state.room_code,
+                    audio_url: state.audio_url,
+                })
+        })
+        .into_iter()
+        .collect()
+}
+
 #[spacetimedb::reducer(init)]
 pub fn init(ctx: &ReducerContext) -> Result<(), String> {
     ensure_catalog(ctx)?;
@@ -623,8 +692,9 @@ pub fn create_room(
         room_code: code,
         name: host_name.to_string(),
         score: 0,
-        correct_streak: 0,
         locked_out_this_round: false,
+        correct_streak: 0,
+        score_delta: 0,
     });
     Ok(())
 }
@@ -878,20 +948,18 @@ pub fn submit_guess(
         .ok_or_else(|| "Song secret not found".to_string())?;
 
     if guessed_track_id == secret.track_id {
-        let score = player.score + 1;
+        let mut player = player;
+        let score = adjust_score(&mut player, 1)?;
         let correct_streak = player.correct_streak + 1;
         let player_name = player.name.clone();
-        ctx.db.player().identity().update(Player {
-            score,
-            correct_streak,
-            ..player
-        });
+        player.correct_streak = correct_streak;
+        ctx.db.player().identity().update(player);
         ctx.db.round_state().room_code().update(RoundState {
             revealed_track_name: Some(secret.track_name),
             revealed_artist_name: Some(secret.artist_name),
             ..state
         });
-        if score >= room.target_score as i32 {
+        if score >= i64::from(room.target_score) {
             ctx.db.room().code().update(Room {
                 status: STATUS_GAME_OVER.to_string(),
                 winner_name: Some(player_name),
@@ -904,12 +972,10 @@ pub fn submit_guess(
             });
         }
     } else {
-        let player = Player {
-            score: player.score - 1,
-            correct_streak: 0,
-            locked_out_this_round: true,
-            ..player
-        };
+        let mut player = player;
+        adjust_score(&mut player, -1)?;
+        player.correct_streak = 0;
+        player.locked_out_this_round = true;
         ctx.db.player().identity().update(player);
         let mut state = state;
         state.locked_by = None;
@@ -1026,13 +1092,21 @@ pub fn end_game(ctx: &ReducerContext, room_code: String) -> Result<(), String> {
         return Err("The game has already ended".into());
     }
 
-    let mut players: Vec<Player> = ctx.db.player().room_code().filter(&room_code).collect();
-    players.sort_by(|a, b| b.score.cmp(&a.score).then_with(|| a.name.cmp(&b.name)));
-    let winner_name = players.first().and_then(|leader| {
+    let mut players: Vec<(i64, Player)> = ctx
+        .db
+        .player()
+        .room_code()
+        .filter(&room_code)
+        .map(|player| (effective_score(&player), player))
+        .collect();
+    players.sort_by(|(a_score, a), (b_score, b)| {
+        b_score.cmp(a_score).then_with(|| a.name.cmp(&b.name))
+    });
+    let winner_name = players.first().and_then(|(leader_score, leader)| {
         let has_unique_lead = players
             .get(1)
-            .is_none_or(|runner_up| runner_up.score < leader.score);
-        (leader.score > 0 && has_unique_lead).then(|| leader.name.clone())
+            .is_none_or(|(runner_up_score, _)| runner_up_score < leader_score);
+        (*leader_score > 0 && has_unique_lead).then(|| leader.name.clone())
     });
 
     ctx.db.room().code().update(Room {

@@ -52,6 +52,7 @@ import VoteSkipReducer from "./vote_skip_reducer";
 // Import all table schema definitions
 import HostRoundAudioRow from "./host_round_audio_table";
 import MyRoomRow from "./my_room_table";
+import PlayerRoundAudioRow from "./player_round_audio_table";
 import PlayersInMyRoomRow from "./players_in_my_room_table";
 import PublicLobbiesRow from "./public_lobbies_table";
 import RoundStateForMyRoomRow from "./round_state_for_my_room_table";
@@ -75,6 +76,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, MyRoomRow),
+  playerRoundAudio: __table({
+    name: 'player_round_audio',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, PlayerRoundAudioRow),
   playersInMyRoom: __table({
     name: 'players_in_my_room',
     indexes: [
@@ -131,6 +139,8 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "host_round_audio": Omit<typeof tablesSchema.schemaType.tables["hostRoundAudio"], "accessorName"> & { readonly accessorName: "host_round_audio" };
     /** @deprecated Use `myRoom` instead. This alias will be removed in the next major version. */
     readonly "my_room": Omit<typeof tablesSchema.schemaType.tables["myRoom"], "accessorName"> & { readonly accessorName: "my_room" };
+    /** @deprecated Use `playerRoundAudio` instead. This alias will be removed in the next major version. */
+    readonly "player_round_audio": Omit<typeof tablesSchema.schemaType.tables["playerRoundAudio"], "accessorName"> & { readonly accessorName: "player_round_audio" };
     /** @deprecated Use `playersInMyRoom` instead. This alias will be removed in the next major version. */
     readonly "players_in_my_room": Omit<typeof tablesSchema.schemaType.tables["playersInMyRoom"], "accessorName"> & { readonly accessorName: "players_in_my_room" };
     /** @deprecated Use `publicLobbies` instead. This alias will be removed in the next major version. */
@@ -159,6 +169,7 @@ const REMOTE_MODULE = {
 const tableAccessorAliases = {
   "host_round_audio": "hostRoundAudio",
   "my_room": "myRoom",
+  "player_round_audio": "playerRoundAudio",
   "players_in_my_room": "playersInMyRoom",
   "public_lobbies": "publicLobbies",
   "round_state_for_my_room": "roundStateForMyRoom",
@@ -187,6 +198,8 @@ export type DbView = __DbViewBase & {
   readonly "host_round_audio": __DbViewBase["hostRoundAudio"];
   /** @deprecated Use `myRoom` instead. This alias will be removed in the next major version. */
   readonly "my_room": __DbViewBase["myRoom"];
+  /** @deprecated Use `playerRoundAudio` instead. This alias will be removed in the next major version. */
+  readonly "player_round_audio": __DbViewBase["playerRoundAudio"];
   /** @deprecated Use `playersInMyRoom` instead. This alias will be removed in the next major version. */
   readonly "players_in_my_room": __DbViewBase["playersInMyRoom"];
   /** @deprecated Use `publicLobbies` instead. This alias will be removed in the next major version. */
@@ -203,6 +216,8 @@ export type Tables = __TablesBase & {
   readonly "host_round_audio": __TablesBase["hostRoundAudio"];
   /** @deprecated Use `myRoom` instead. This alias will be removed in the next major version. */
   readonly "my_room": __TablesBase["myRoom"];
+  /** @deprecated Use `playerRoundAudio` instead. This alias will be removed in the next major version. */
+  readonly "player_round_audio": __TablesBase["playerRoundAudio"];
   /** @deprecated Use `playersInMyRoom` instead. This alias will be removed in the next major version. */
   readonly "players_in_my_room": __TablesBase["playersInMyRoom"];
   /** @deprecated Use `publicLobbies` instead. This alias will be removed in the next major version. */

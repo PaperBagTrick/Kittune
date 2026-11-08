@@ -14,7 +14,7 @@ export default __t.row({
   identity: __t.identity().primaryKey(),
   roomCode: __t.string().name("room_code"),
   name: __t.string(),
-  score: __t.i32(),
-  correctStreak: __t.u32().name("correct_streak"),
+  score: __t.i64(),
   lockedOutThisRound: __t.bool().name("locked_out_this_round"),
+  correctStreak: __t.u32().name("correct_streak"),
 });

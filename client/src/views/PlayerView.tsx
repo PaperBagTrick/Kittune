@@ -11,6 +11,7 @@ export default function PlayerView({ onBack }: Props) {
   const [publicLobbies] = useTable(tables.publicLobbies);
   const [skipVotes] = useTable(tables.skipVotesForMyRoom);
   const [rounds] = useTable(tables.roundStateForMyRoom);
+  const [roundAudioRows] = useTable(tables.playerRoundAudio);
   const { identity, isActive, connectionError } = useSpacetimeDB();
   const joinRoom = useReducer(reducers.joinRoom);
   const joinPublicRoom = useReducer(reducers.joinPublicRoom);
@@ -26,14 +27,27 @@ export default function PlayerView({ onBack }: Props) {
   const [busy, setBusy] = useState(false);
   const [votingToSkip, setVotingToSkip] = useState(false);
   const [submittedSkipVote, setSubmittedSkipVote] = useState('');
+  const [audioBlocked, setAudioBlocked] = useState(false);
+  const audioRef = useRef<HTMLAudioElement>(null);
   const timeoutSent = useRef(false);
 
   const room = rooms.find((row) => row.code === roomCode);
   const roundState = rounds.find((row) => row.roomCode === roomCode);
+  const roundAudio = roundAudioRows.find((row) => row.roomCode === roomCode);
   const identityHex = identity?.toHexString();
   const myPlayer = players.find((player) => player.identity.toHexString() === identityHex);
   const isMyTurn = Boolean(room?.status === 'PAUSED_FOR_GUESS' && roundState?.lockedBy && identityHex && roundState.lockedBy.toHexString() === identityHex);
   const otherPlayer = players.find((player) => player.identity.toHexString() === roundState?.lockedBy?.toHexString());
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !room || !roundAudio) return;
+    if (room.status === 'PLAYING') {
+      void audio.play().then(() => setAudioBlocked(false)).catch(() => setAudioBlocked(true));
+    } else {
+      audio.pause();
+    }
+  }, [room?.status, roundAudio?.audioUrl, room, roundAudio]);
 
   useEffect(() => {
     if (myPlayer && !roomCode) {
@@ -73,7 +87,7 @@ export default function PlayerView({ onBack }: Props) {
 
   const sortedPlayers = useMemo(
     () => players.filter((player) => player.roomCode === roomCode)
-      .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name)),
+      .sort((a, b) => (a.score === b.score ? a.name.localeCompare(b.name) : a.score > b.score ? -1 : 1)),
     [players, roomCode],
   );
   const roundSkipVotes = useMemo(
@@ -194,7 +208,7 @@ export default function PlayerView({ onBack }: Props) {
 
   return (
     <main className={`player-shell ${isMyTurn ? 'player-my-turn' : ''}`}>
-      <header className="player-topbar"><button className="wordmark" onClick={onBack}><span>🐾</span> KITTUNE</button><span className="room-mini">ROOM <b>{roomCode}</b></span><span className="player-score-pill">{myPlayer.name}{myPlayer.correctStreak >= 3 && <span className="streak-fire" title={`${myPlayer.correctStreak} correct guesses in a row`}>🔥</span>} <b>{myPlayer.score} pts</b></span></header>
+      <header className="player-topbar"><button className="wordmark" onClick={onBack}><span>🐾</span> KITTUNE</button><span className="room-mini">ROOM <b>{roomCode}</b></span><span className="player-score-pill">{myPlayer.name}{myPlayer.correctStreak >= 3 && <span className="streak-fire" title={`${myPlayer.correctStreak} correct guesses in a row`}>🔥</span>} <b>{myPlayer.score.toString()} pts</b></span></header>
       {!room ? (
         <section className="player-center panel"><span className="spinner" /> Finding room {roomCode}…</section>
       ) : room.status === 'LOBBY' ? (
@@ -216,6 +230,7 @@ export default function PlayerView({ onBack }: Props) {
               <div className="playing-card panel">
                 <div className="playing-copy"><span className="sound-bars"><i /><i /><i /><i /><i /><i /></span><span className="panel-kicker">LISTEN CLOSELY</span><h1>What’s<br /><em>that sound?</em></h1><p>The first paw to the buzzer gets ten seconds to name the track.</p><div className="audio-indicator"><i /> AUDIO IS LIVE</div></div>
                 <button className="paw-button host-paw-button" onClick={() => void paw()} disabled={myPlayer.lockedOutThisRound} aria-label="Paw the buzzer"><span>🐾</span><b>{myPlayer.lockedOutThisRound ? 'SCRATCHED' : 'PAW IN'}</b></button>
+                {audioBlocked && <button className="audio-enable" onClick={() => { void audioRef.current?.play().then(() => setAudioBlocked(false)).catch(() => setAudioBlocked(true)); }}>Tap to enable audio</button>}
               </div>
             )}
             {(room.status === 'PLAYING' || room.status === 'PAUSED_FOR_GUESS') && (
@@ -230,16 +245,17 @@ export default function PlayerView({ onBack }: Props) {
           <aside className="scoreboard panel">
             <div className="panel-heading"><div><span className="panel-kicker">THE LEADERBOARD</span><h2>Scoreboard</h2></div><span className="score-trophy">🏆</span></div>
             <div className="score-list">
-              {sortedPlayers.map((player, index) => <div key={player.identity.toHexString()} className={`score-row ${index === 0 && player.score > 0 ? 'score-leader' : ''}`}><span className="rank">{String(index + 1).padStart(2, '0')}</span><span className={`avatar avatar-${index % 5}`}>{['🐱', '🐈', '😼', '🐾', '😺'][index % 5]}</span><span className="player-name"><span className="player-label">{player.name}</span>{player.correctStreak >= 3 && <span className="streak-fire" title={`${player.correctStreak} correct guesses in a row`}>🔥</span>}</span><span className="score-number">{player.score}</span></div>)}
+              {sortedPlayers.map((player, index) => <div key={player.identity.toHexString()} className={`score-row ${index === 0 && player.score > 0n ? 'score-leader' : ''}`}><span className="rank">{String(index + 1).padStart(2, '0')}</span><span className={`avatar avatar-${index % 5}`}>{['🐱', '🐈', '😼', '🐾', '😺'][index % 5]}</span><span className="player-name"><span className="player-label">{player.name}</span>{player.correctStreak >= 3 && <span className="streak-fire" title={`${player.correctStreak} correct guesses in a row`}>🔥</span>}</span><span className="score-number">{player.score.toString()}</span></div>)}
               {sortedPlayers.length === 0 && <p className="muted-note">No players yet.</p>}
             </div>
-            <div className="target-progress"><span>FIRST TO {room.targetScore}</span><div className="target-dots">{Array.from({ length: room.targetScore }, (_, index) => <i key={index} className={sortedPlayers.some((player) => player.score > index) ? 'filled' : ''} />)}</div></div>
+            <div className="target-progress"><span>FIRST TO {room.targetScore}</span><div className="target-dots">{Array.from({ length: room.targetScore }, (_, index) => <i key={index} className={sortedPlayers.some((player) => player.score > BigInt(index)) ? 'filled' : ''} />)}</div></div>
           </aside>
         </section>
       )}
       <footer className="host-footer"><span>ROOM <b>{roomCode}</b></span><span>🎧 &nbsp; Turn it up. Keep it kind.</span><span>KITTUNE <b>✦</b></span></footer>
       {error && <div className="toast-error" role="status">{error}<button onClick={() => setError('')}>×</button></div>}
       {isMyTurn && <SongSearchModal secondsLeft={secondsLeft} onSelect={guess} />}
+      {roomCode && roundState && roundAudio && <audio ref={audioRef} src={roundAudio.audioUrl} />}
     </main>
   );
 }

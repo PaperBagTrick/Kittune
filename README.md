@@ -45,6 +45,16 @@ An incorrect guess deducts one point (scores can go negative). Three or more con
 
 Both services bind to the local machine by default. Connecting from a phone or another computer requires configuring network access separately.
 
+## Update the cloud module without deleting data
+
+From the `server` directory, publish to the cloud database explicitly; the repository configuration may default to the local server:
+
+```powershell
+spacetime publish kittune-paperbagtrick-2026 --server "https://maincloud.spacetimedb.com" --delete-data=never
+```
+
+The current module preserves the existing `player` column order and unsigned score column, adding a signed score adjustment after the existing fields so negative scores remain supported. If publishing reports a schema or migration error, stop and resolve it before retrying; do not use a data-deletion option.
+
 ## Optional song picker
 
 The `cre` directory contains a standalone Python song-picker utility. See [cre/README.md](cre/README.md) for its usage.

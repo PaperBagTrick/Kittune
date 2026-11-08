@@ -58,7 +58,7 @@ export default function HostView({ onBack }: Props) {
   );
   const players = useMemo(
     () => allPlayers.filter((player) => player.roomCode === roomCode)
-      .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name)),
+      .sort((a, b) => (a.score === b.score ? a.name.localeCompare(b.name) : a.score > b.score ? -1 : 1)),
     [allPlayers, roomCode],
   );
   const roundSkipVotes = useMemo(
@@ -260,7 +260,7 @@ export default function HostView({ onBack }: Props) {
                 <div className="player-card" key={player.identity.toHexString()}>
                   <span className={`avatar avatar-${index % 5}`}>{['🐱', '🐈', '😼', '🐾', '😺'][index % 5]}</span>
                   <span className="player-name"><span className="player-label">{player.name}</span>{player.correctStreak >= 3 && <span className="streak-fire" title={`${player.correctStreak} correct guesses in a row`}>🔥</span>}</span>
-                  <span className="score-chip">{player.score}<small> pts</small></span>
+                  <span className="score-chip">{player.score.toString()}<small> pts</small></span>
                 </div>
               ))}
               {players.length === 0 && <div className="empty-crew"><span>🐾</span><p>Your crew will show up here</p></div>}
@@ -300,10 +300,10 @@ export default function HostView({ onBack }: Props) {
           <aside className="scoreboard panel">
             <div className="panel-heading"><div><span className="panel-kicker">THE LEADERBOARD</span><h2>Scoreboard</h2></div><span className="score-trophy">🏆</span></div>
             <div className="score-list">
-              {players.map((player, index) => <div key={player.identity.toHexString()} className={`score-row ${index === 0 && player.score > 0 ? 'score-leader' : ''}`}><span className="rank">{String(index + 1).padStart(2, '0')}</span><span className={`avatar avatar-${index % 5}`}>{['🐱', '🐈', '😼', '🐾', '😺'][index % 5]}</span><span className="player-name"><span className="player-label">{player.name}</span>{player.correctStreak >= 3 && <span className="streak-fire" title={`${player.correctStreak} correct guesses in a row`}>🔥</span>}</span><span className="score-number">{player.score}</span></div>)}
+              {players.map((player, index) => <div key={player.identity.toHexString()} className={`score-row ${index === 0 && player.score > 0n ? 'score-leader' : ''}`}><span className="rank">{String(index + 1).padStart(2, '0')}</span><span className={`avatar avatar-${index % 5}`}>{['🐱', '🐈', '😼', '🐾', '😺'][index % 5]}</span><span className="player-name"><span className="player-label">{player.name}</span>{player.correctStreak >= 3 && <span className="streak-fire" title={`${player.correctStreak} correct guesses in a row`}>🔥</span>}</span><span className="score-number">{player.score.toString()}</span></div>)}
               {players.length === 0 && <p className="muted-note">No players yet.</p>}
             </div>
-            <div className="target-progress"><span>FIRST TO {room.targetScore}</span><div className="target-dots">{Array.from({ length: room.targetScore }, (_, i) => <i key={i} className={players.some((p) => p.score > i) ? 'filled' : ''} />)}</div></div>
+            <div className="target-progress"><span>FIRST TO {room.targetScore}</span><div className="target-dots">{Array.from({ length: room.targetScore }, (_, i) => <i key={i} className={players.some((p) => p.score > BigInt(i)) ? 'filled' : ''} />)}</div></div>
           </aside>
         </section>
       )}

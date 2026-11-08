@@ -31,11 +31,28 @@ export const Player = __t.object("Player", {
   identity: __t.identity(),
   roomCode: __t.string(),
   name: __t.string(),
-  score: __t.i32(),
-  correctStreak: __t.u32(),
+  score: __t.u32(),
   lockedOutThisRound: __t.bool(),
+  correctStreak: __t.u32(),
+  scoreDelta: __t.i64(),
 });
 export type Player = __Infer<typeof Player>;
+
+export const PlayerRoundAudio = __t.object("PlayerRoundAudio", {
+  roomCode: __t.string(),
+  audioUrl: __t.string(),
+});
+export type PlayerRoundAudio = __Infer<typeof PlayerRoundAudio>;
+
+export const PlayerView = __t.object("PlayerView", {
+  identity: __t.identity(),
+  roomCode: __t.string(),
+  name: __t.string(),
+  score: __t.i64(),
+  lockedOutThisRound: __t.bool(),
+  correctStreak: __t.u32(),
+});
+export type PlayerView = __Infer<typeof PlayerView>;
 
 export const PublicLobby = __t.object("PublicLobby", {
   code: __t.string(),
