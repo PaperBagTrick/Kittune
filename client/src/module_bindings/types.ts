@@ -35,6 +35,7 @@ export const Player = __t.object("Player", {
   lockedOutThisRound: __t.bool(),
   correctStreak: __t.u32(),
   scoreDelta: __t.i64(),
+  eliminated: __t.bool(),
 });
 export type Player = __Infer<typeof Player>;
 
@@ -51,8 +52,16 @@ export const PlayerView = __t.object("PlayerView", {
   score: __t.i64(),
   lockedOutThisRound: __t.bool(),
   correctStreak: __t.u32(),
+  online: __t.bool(),
+  eliminated: __t.bool(),
 });
 export type PlayerView = __Infer<typeof PlayerView>;
+
+export const PresenceSession = __t.object("PresenceSession", {
+  connectionId: __t.connectionId(),
+  identity: __t.identity(),
+});
+export type PresenceSession = __Infer<typeof PresenceSession>;
 
 export const PublicLobby = __t.object("PublicLobby", {
   code: __t.string(),
@@ -74,6 +83,7 @@ export const Room = __t.object("Room", {
   maxPlayers: __t.u32(),
   createdAt: __t.option(__t.timestamp()),
   lastHostSeen: __t.option(__t.timestamp()),
+  catalogId: __t.string(),
 });
 export type Room = __Infer<typeof Room>;
 
@@ -104,6 +114,9 @@ export const RoundState = __t.object("RoundState", {
   buzzTimestamp: __t.option(__t.timestamp()),
   revealedTrackName: __t.option(__t.string()),
   revealedArtistName: __t.option(__t.string()),
+  lastGuessResult: __t.option(__t.string()),
+  lastGuessPlayerName: __t.option(__t.string()),
+  guessResultSequence: __t.u32(),
 });
 export type RoundState = __Infer<typeof RoundState>;
 
@@ -115,6 +128,10 @@ export const RoundView = __t.object("RoundView", {
   buzzTimestamp: __t.option(__t.timestamp()),
   revealedTrackName: __t.option(__t.string()),
   revealedArtistName: __t.option(__t.string()),
+  lastGuessResult: __t.option(__t.string()),
+  lastGuessPlayerName: __t.option(__t.string()),
+  guessResultSequence: __t.u32(),
+  guessTargetTrackId: __t.option(__t.i64()),
 });
 export type RoundView = __Infer<typeof RoundView>;
 
@@ -124,6 +141,30 @@ export const SkipVote = __t.object("SkipVote", {
   round: __t.u32(),
 });
 export type SkipVote = __Infer<typeof SkipVote>;
+
+export const SongCatalog = __t.object("SongCatalog", {
+  catalogId: __t.string(),
+  name: __t.string(),
+  description: __t.string(),
+  qualityNote: __t.string(),
+});
+export type SongCatalog = __Infer<typeof SongCatalog>;
+
+export const SongCatalogEntry = __t.object("SongCatalogEntry", {
+  entryId: __t.string(),
+  catalogId: __t.string(),
+  slot: __t.u32(),
+  trackId: __t.i64(),
+});
+export type SongCatalogEntry = __Infer<typeof SongCatalogEntry>;
+
+export const SongCatalogView = __t.object("SongCatalogView", {
+  catalogId: __t.string(),
+  name: __t.string(),
+  description: __t.string(),
+  qualityNote: __t.string(),
+});
+export type SongCatalogView = __Infer<typeof SongCatalogView>;
 
 export const SongOrder = __t.object("SongOrder", {
   roomCode: __t.string(),

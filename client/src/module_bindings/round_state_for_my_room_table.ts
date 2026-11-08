@@ -18,4 +18,8 @@ export default __t.row({
   buzzTimestamp: __t.option(__t.timestamp()).name("buzz_timestamp"),
   revealedTrackName: __t.option(__t.string()).name("revealed_track_name"),
   revealedArtistName: __t.option(__t.string()).name("revealed_artist_name"),
+  lastGuessResult: __t.option(__t.string()).name("last_guess_result"),
+  lastGuessPlayerName: __t.option(__t.string()).name("last_guess_player_name"),
+  guessResultSequence: __t.u32().name("guess_result_sequence"),
+  guessTargetTrackId: __t.option(__t.i64()).name("guess_target_track_id"),
 });

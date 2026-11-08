@@ -1,7 +1,7 @@
 use serde::Deserialize;
 use spacetimedb::{
-    AnonymousViewContext, Identity, ReducerContext, ScheduleAt, SpacetimeType, Table, TimeDuration,
-    Timestamp, ViewContext,
+    AnonymousViewContext, ConnectionId, Identity, ReducerContext, ScheduleAt, SpacetimeType, Table,
+    TimeDuration, Timestamp, ViewContext,
     rand::{Rng, SeedableRng, rngs::StdRng},
 };
 use std::time::Duration;
@@ -11,11 +11,12 @@ const STATUS_PLAYING: &str = "PLAYING";
 const STATUS_PAUSED: &str = "PAUSED_FOR_GUESS";
 const STATUS_ROUND_OVER: &str = "ROUND_OVER";
 const STATUS_GAME_OVER: &str = "GAME_OVER";
-const GUESS_WINDOW_MICROS: i64 = 10_000_000;
+const GUESS_WINDOW_MICROS: i64 = 15_000_000;
 const DEFAULT_MAX_PLAYERS: u32 = 8;
 const MIN_MAX_PLAYERS: u32 = 2;
 const MAX_MAX_PLAYERS: u32 = 12;
 const HOST_STALE_MICROS: i64 = 300_000_000;
+const DEFAULT_CATALOG_ID: &str = "top-1000";
 
 #[spacetimedb::table(accessor = room)]
 pub struct Room {
@@ -36,6 +37,8 @@ pub struct Room {
     pub created_at: Option<Timestamp>,
     #[default(None)]
     pub last_host_seen: Option<Timestamp>,
+    #[default("top-1000")]
+    pub catalog_id: String,
 }
 
 #[spacetimedb::table(accessor = player)]
@@ -49,8 +52,19 @@ pub struct Player {
     pub locked_out_this_round: bool,
     #[default(0)]
     pub correct_streak: u32,
+    // Preserve the deployed u32 score column; keep this compatible adjustment appended/defaulted.
     #[default(0)]
     pub score_delta: i64,
+    #[default(false)]
+    pub eliminated: bool,
+}
+
+#[spacetimedb::table(accessor = presence_session)]
+pub struct PresenceSession {
+    #[primary_key]
+    pub connection_id: ConnectionId,
+    #[index(btree)]
+    pub identity: Identity,
 }
 
 #[spacetimedb::table(accessor = round_state)]
@@ -66,6 +80,12 @@ pub struct RoundState {
     pub revealed_track_name: Option<String>,
     #[default(None)]
     pub revealed_artist_name: Option<String>,
+    #[default(None)]
+    pub last_guess_result: Option<String>,
+    #[default(None)]
+    pub last_guess_player_name: Option<String>,
+    #[default(0)]
+    pub guess_result_sequence: u32,
 }
 
 #[derive(SpacetimeType)]
@@ -97,6 +117,8 @@ pub struct PlayerView {
     pub score: i64,
     pub locked_out_this_round: bool,
     pub correct_streak: u32,
+    pub online: bool,
+    pub eliminated: bool,
 }
 
 #[derive(SpacetimeType)]
@@ -108,6 +130,10 @@ pub struct RoundView {
     pub buzz_timestamp: Option<Timestamp>,
     pub revealed_track_name: Option<String>,
     pub revealed_artist_name: Option<String>,
+    pub last_guess_result: Option<String>,
+    pub last_guess_player_name: Option<String>,
+    pub guess_result_sequence: u32,
+    pub guess_target_track_id: Option<i64>,
 }
 
 #[derive(SpacetimeType)]
@@ -165,6 +191,34 @@ pub struct CatalogSong {
     pub artwork_url: String,
 }
 
+#[spacetimedb::table(accessor = song_catalog)]
+pub struct SongCatalog {
+    #[primary_key]
+    pub catalog_id: String,
+    pub name: String,
+    pub description: String,
+    pub quality_note: String,
+}
+
+#[spacetimedb::table(accessor = song_catalog_entry)]
+pub struct SongCatalogEntry {
+    #[primary_key]
+    pub entry_id: String,
+    #[index(btree)]
+    pub catalog_id: String,
+    #[index(btree)]
+    pub slot: u32,
+    pub track_id: i64,
+}
+
+#[derive(SpacetimeType)]
+pub struct SongCatalogView {
+    pub catalog_id: String,
+    pub name: String,
+    pub description: String,
+    pub quality_note: String,
+}
+
 #[spacetimedb::table(accessor = song_order)]
 pub struct SongOrder {
     #[primary_key]
@@ -180,6 +234,33 @@ struct SeedSong {
     artist_name: String,
     preview_url: String,
     artwork_url: String,
+}
+
+struct SeedCatalog {
+    catalog_id: &'static str,
+    name: &'static str,
+    description: &'static str,
+    quality_note: &'static str,
+    json: &'static str,
+}
+
+fn bundled_catalogs() -> [SeedCatalog; 2] {
+    [
+        SeedCatalog {
+            catalog_id: DEFAULT_CATALOG_ID,
+            name: "Top 1000",
+            description: "A shuffled selection from the popular-song catalog.",
+            quality_note: "Track previews vary by recording.",
+            json: include_str!("../../seeds/seed_catalog.json"),
+        },
+        SeedCatalog {
+            catalog_id: "nursery-rhymes",
+            name: "Nursery Rhymes",
+            description: "A curated set of familiar nursery rhymes and children's songs.",
+            quality_note: "Each rhyme uses one selected recording. Many versions sound alike, and short previews can be generic or uneven.",
+            json: include_str!("../../seeds/seed_nursery_rhymes.json"),
+        },
+    ]
 }
 
 fn room_for_sender(ctx: &ViewContext) -> Option<Room> {
@@ -254,6 +335,13 @@ pub fn players_in_my_room(ctx: &ViewContext) -> Vec<PlayerView> {
                 .filter(&room.code)
                 .map(|player| {
                     let score = effective_score(&player);
+                    let online = ctx
+                        .db
+                        .presence_session()
+                        .identity()
+                        .filter(player.identity)
+                        .next()
+                        .is_some();
                     PlayerView {
                         identity: player.identity,
                         room_code: player.room_code,
@@ -261,6 +349,8 @@ pub fn players_in_my_room(ctx: &ViewContext) -> Vec<PlayerView> {
                         score,
                         locked_out_this_round: player.locked_out_this_round,
                         correct_streak: player.correct_streak,
+                        online,
+                        eliminated: player.eliminated || score <= -3,
                     }
                 })
                 .collect()
@@ -275,6 +365,17 @@ pub fn skip_votes_for_my_room(ctx: &ViewContext) -> Vec<SkipVote> {
         .unwrap_or_default()
 }
 
+#[spacetimedb::view(accessor = available_song_catalogs, public, primary_key = catalog_id)]
+pub fn available_song_catalogs(ctx: &AnonymousViewContext) -> Vec<SongCatalogView> {
+    let _ = ctx;
+    bundled_catalogs().into_iter().map(|catalog| SongCatalogView {
+        catalog_id: catalog.catalog_id.to_string(),
+        name: catalog.name.to_string(),
+        description: catalog.description.to_string(),
+        quality_note: catalog.quality_note.to_string(),
+    }).collect()
+}
+
 #[spacetimedb::view(accessor = round_state_for_my_room, public, primary_key = room_code)]
 pub fn round_state_for_my_room(ctx: &ViewContext) -> Vec<RoundView> {
     let Some(room) = room_for_sender(ctx) else {
@@ -284,6 +385,16 @@ pub fn round_state_for_my_room(ctx: &ViewContext) -> Vec<RoundView> {
         return Vec::new();
     };
     let reveal_answer = matches!(room.status.as_str(), STATUS_ROUND_OVER | STATUS_GAME_OVER);
+    let guess_target_track_id = if room.status == STATUS_PAUSED && state.locked_by == Some(ctx.sender()) {
+        ctx.db
+            .song_secret()
+            .room_code()
+            .filter(&room.code)
+            .next()
+            .map(|song| song.track_id)
+    } else {
+        None
+    };
     vec![RoundView {
         room_code: state.room_code,
         artwork_url: state.artwork_url,
@@ -294,6 +405,10 @@ pub fn round_state_for_my_room(ctx: &ViewContext) -> Vec<RoundView> {
         revealed_artist_name: reveal_answer
             .then_some(state.revealed_artist_name)
             .flatten(),
+        last_guess_result: state.last_guess_result,
+        last_guess_player_name: state.last_guess_player_name,
+        guess_result_sequence: state.guess_result_sequence,
+        guess_target_track_id,
     }]
 }
 
@@ -396,42 +511,62 @@ fn join_room_as(
         locked_out_this_round: false,
         correct_streak: 0,
         score_delta: 0,
+        eliminated: false,
     });
     Ok(())
 }
 
-fn ensure_catalog(ctx: &ReducerContext) -> Result<(), String> {
-    if ctx.db.catalog_song().count() > 0 {
-        return Ok(());
-    }
-
-    let seeds: Vec<SeedSong> = serde_json::from_str(include_str!("../../seeds/seed_catalog.json"))
-        .map_err(|error| format!("Could not read bundled song catalog: {error}"))?;
-    if seeds.len() < 15 {
-        return Err("The bundled catalog must contain at least 15 songs".into());
-    }
-
-    for (slot, seed) in seeds.into_iter().enumerate() {
-        ctx.db.catalog_song().insert(CatalogSong {
-            track_id: seed.track_id,
-            slot: slot as u32,
-            track_name: seed.track_name,
-            artist_name: seed.artist_name,
-            preview_url: seed.preview_url,
-            artwork_url: seed.artwork_url,
+fn ensure_catalogs(ctx: &ReducerContext) -> Result<(), String> {
+    for catalog in bundled_catalogs() {
+        if ctx.db.song_catalog().catalog_id().find(catalog.catalog_id.to_string()).is_some() {
+            continue;
+        }
+        ctx.db.song_catalog().insert(SongCatalog {
+            catalog_id: catalog.catalog_id.to_string(),
+            name: catalog.name.to_string(),
+            description: catalog.description.to_string(),
+            quality_note: catalog.quality_note.to_string(),
         });
+        let seeds: Vec<SeedSong> = serde_json::from_str(catalog.json)
+            .map_err(|error| format!("Could not read bundled catalog '{}': {error}", catalog.catalog_id))?;
+        if seeds.len() < 15 {
+            return Err(format!("Bundled catalog '{}' must contain at least 15 songs", catalog.catalog_id));
+        }
+        for (slot, seed) in seeds.into_iter().enumerate() {
+            if ctx.db.catalog_song().track_id().find(seed.track_id).is_none() {
+                ctx.db.catalog_song().insert(CatalogSong {
+                    track_id: seed.track_id,
+                    slot: slot as u32,
+                    track_name: seed.track_name,
+                    artist_name: seed.artist_name,
+                    preview_url: seed.preview_url,
+                    artwork_url: seed.artwork_url,
+                });
+            }
+            let entry_id = format!("{}:{}", catalog.catalog_id, seed.track_id);
+            if ctx.db.song_catalog_entry().entry_id().find(entry_id.clone()).is_none() {
+                ctx.db.song_catalog_entry().insert(SongCatalogEntry {
+                    entry_id,
+                    catalog_id: catalog.catalog_id.to_string(),
+                    slot: slot as u32,
+                    track_id: seed.track_id,
+                });
+            }
+        }
     }
     Ok(())
 }
 
-fn shuffled_track_ids(ctx: &ReducerContext, shuffle_seed: &str) -> Result<Vec<i64>, String> {
-    ensure_catalog(ctx)?;
-    let mut track_ids: Vec<i64> = ctx
+fn shuffled_track_ids(ctx: &ReducerContext, catalog_id: &str, shuffle_seed: &str) -> Result<Vec<i64>, String> {
+    ensure_catalogs(ctx)?;
+    let mut entries: Vec<SongCatalogEntry> = ctx
         .db
-        .catalog_song()
-        .iter()
-        .map(|song| song.track_id)
+        .song_catalog_entry()
+        .catalog_id()
+        .filter(catalog_id)
         .collect();
+    entries.sort_by_key(|entry| entry.slot);
+    let mut track_ids: Vec<i64> = entries.into_iter().map(|entry| entry.track_id).collect();
     if track_ids.is_empty() {
         return Err("The song catalog is empty".into());
     }
@@ -459,8 +594,9 @@ fn set_round_song(
     round: u32,
     shuffle_seed: &str,
 ) -> Result<(), String> {
-    ensure_catalog(ctx)?;
-    let count = ctx.db.catalog_song().count() as usize;
+    ensure_catalogs(ctx)?;
+    let room = ctx.db.room().code().find(room_code.to_string()).ok_or_else(|| "Room not found".to_string())?;
+    let count = ctx.db.song_catalog_entry().catalog_id().filter(&room.catalog_id).count() as usize;
     if count == 0 {
         return Err("The song catalog is empty".into());
     }
@@ -471,7 +607,7 @@ fn set_round_song(
         .find(room_code.to_string())
         .is_some();
     if round as usize % count == 0 || !has_song_order {
-        let mut track_ids = shuffled_track_ids(ctx, shuffle_seed)?;
+        let mut track_ids = shuffled_track_ids(ctx, &room.catalog_id, shuffle_seed)?;
         let previous_track_id = ctx
             .db
             .song_secret()
@@ -535,6 +671,9 @@ fn set_round_song(
         buzz_timestamp: None,
         revealed_track_name: None,
         revealed_artist_name: None,
+        last_guess_result: None,
+        last_guess_player_name: None,
+        guess_result_sequence: 0,
     };
     if ctx
         .db
@@ -555,6 +694,43 @@ fn require_host(ctx: &ReducerContext, room: &Room) -> Result<(), String> {
         return Err("Only the room host can do that".into());
     }
     Ok(())
+}
+
+fn end_game_if_no_active_players(ctx: &ReducerContext, room_code: &str) -> Result<bool, String> {
+    let room = ctx
+        .db
+        .room()
+        .code()
+        .find(room_code.to_string())
+        .ok_or_else(|| "Room not found".to_string())?;
+    if room.status == STATUS_GAME_OVER {
+        return Ok(true);
+    }
+
+    let has_active_player = ctx
+        .db
+        .player()
+        .room_code()
+        .filter(room_code)
+        .any(|player| !player.eliminated && effective_score(&player) > -3);
+    if has_active_player {
+        return Ok(false);
+    }
+
+    if let (Some(mut state), Some(secret)) = (
+        ctx.db.round_state().room_code().find(room_code.to_string()),
+        ctx.db.song_secret().room_code().filter(room_code).next(),
+    ) {
+        state.revealed_track_name = Some(secret.track_name);
+        state.revealed_artist_name = Some(secret.artist_name);
+        ctx.db.round_state().room_code().update(state);
+    }
+    ctx.db.room().code().update(Room {
+        status: STATUS_GAME_OVER.to_string(),
+        winner_name: None,
+        ..room
+    });
+    Ok(true)
 }
 
 fn expire_guess(ctx: &ReducerContext, room_code: &str) -> Result<(), String> {
@@ -582,12 +758,16 @@ fn expire_guess(ctx: &ReducerContext, room_code: &str) -> Result<(), String> {
         .identity()
         .find(identity)
         .ok_or_else(|| "Buzzing player not found".to_string())?;
+    let player_name = player.name.clone();
     player.locked_out_this_round = true;
     ctx.db.player().identity().update(player);
 
     state.locked_by = None;
     state.locked_by_name = None;
     state.buzz_timestamp = None;
+    state.last_guess_result = Some("TIMEOUT".to_string());
+    state.last_guess_player_name = Some(player_name);
+    state.guess_result_sequence = state.guess_result_sequence.wrapping_add(1);
     ctx.db.round_state().room_code().update(state);
 
     let updated_room = Room {
@@ -617,7 +797,7 @@ pub fn player_round_audio(ctx: &ViewContext) -> Vec<PlayerRoundAudio> {
 
 #[spacetimedb::reducer(init)]
 pub fn init(ctx: &ReducerContext) -> Result<(), String> {
-    ensure_catalog(ctx)?;
+    ensure_catalogs(ctx)?;
     if ctx.db.room_cleanup_timer().count() == 0 {
         ctx.db.room_cleanup_timer().insert(RoomCleanupTimer {
             scheduled_id: 0,
@@ -627,15 +807,56 @@ pub fn init(ctx: &ReducerContext) -> Result<(), String> {
     Ok(())
 }
 
-#[spacetimedb::reducer]
-pub fn create_room(
+#[spacetimedb::reducer(client_connected)]
+pub fn track_client_connection(ctx: &ReducerContext) -> Result<(), String> {
+    ensure_catalogs(ctx)?;
+    let Some(connection_id) = ctx.connection_id() else {
+        return Ok(());
+    };
+    ctx.db.presence_session().insert(PresenceSession {
+        connection_id,
+        identity: ctx.sender(),
+    });
+    if let Some(player) = ctx.db.player().identity().find(ctx.sender()) {
+        finish_round_if_all_online_players_voted_to_skip(ctx, &player.room_code)?;
+    }
+    Ok(())
+}
+
+#[spacetimedb::reducer(client_disconnected)]
+pub fn clear_client_connection(ctx: &ReducerContext) -> Result<(), String> {
+    let Some(connection_id) = ctx.connection_id() else {
+        return Ok(());
+    };
+    let Some(session) = ctx
+        .db
+        .presence_session()
+        .connection_id()
+        .find(connection_id)
+    else {
+        return Ok(());
+    };
+    ctx.db.presence_session().connection_id().delete(connection_id);
+
+    if let Some(player) = ctx.db.player().identity().find(session.identity) {
+        finish_round_if_all_online_players_voted_to_skip(ctx, &player.room_code)?;
+    }
+    Ok(())
+}
+
+fn create_room_for_catalog(
     ctx: &ReducerContext,
     code: String,
     target_score: u32,
     host_name: String,
     visibility: String,
     max_players: u32,
+    catalog_id: String,
 ) -> Result<(), String> {
+    ensure_catalogs(ctx)?;
+    if ctx.db.song_catalog().catalog_id().find(catalog_id.clone()).is_none() {
+        return Err("Choose one of the available song lists".into());
+    }
     if code.len() != 4 || !code.bytes().all(|byte| byte.is_ascii_uppercase()) {
         return Err("Room code must be exactly four uppercase letters".into());
     }
@@ -686,6 +907,7 @@ pub fn create_room(
         winner_name: None,
         created_at: Some(ctx.timestamp),
         last_host_seen: Some(ctx.timestamp),
+        catalog_id,
     });
     ctx.db.player().insert(Player {
         identity: ctx.sender(),
@@ -695,8 +917,34 @@ pub fn create_room(
         locked_out_this_round: false,
         correct_streak: 0,
         score_delta: 0,
+        eliminated: false,
     });
     Ok(())
+}
+
+#[spacetimedb::reducer]
+pub fn create_room(
+    ctx: &ReducerContext,
+    code: String,
+    target_score: u32,
+    host_name: String,
+    visibility: String,
+    max_players: u32,
+) -> Result<(), String> {
+    create_room_for_catalog(ctx, code, target_score, host_name, visibility, max_players, DEFAULT_CATALOG_ID.to_string())
+}
+
+#[spacetimedb::reducer]
+pub fn create_room_with_catalog(
+    ctx: &ReducerContext,
+    code: String,
+    target_score: u32,
+    host_name: String,
+    visibility: String,
+    max_players: u32,
+    catalog_id: String,
+) -> Result<(), String> {
+    create_room_for_catalog(ctx, code, target_score, host_name, visibility, max_players, catalog_id)
 }
 
 #[spacetimedb::reducer]
@@ -707,6 +955,52 @@ pub fn join_room(ctx: &ReducerContext, code: String, name: String) -> Result<(),
 #[spacetimedb::reducer]
 pub fn join_public_room(ctx: &ReducerContext, code: String, name: String) -> Result<(), String> {
     join_room_as(ctx, code, name, "PUBLIC")
+}
+
+#[spacetimedb::reducer]
+pub fn quit_room(ctx: &ReducerContext) -> Result<(), String> {
+    if let Some(room) = ctx.db.room().host_identity().filter(ctx.sender()).next() {
+        delete_room_data(ctx, &room.code);
+        return Ok(());
+    }
+
+    let player = ctx
+        .db
+        .player()
+        .identity()
+        .find(ctx.sender())
+        .ok_or_else(|| "You are not in a room".to_string())?;
+    let room_code = player.room_code.clone();
+    let room = ctx
+        .db
+        .room()
+        .code()
+        .find(room_code.clone())
+        .ok_or_else(|| "Room not found".to_string())?;
+
+    ctx.db.player().identity().delete(ctx.sender());
+    ctx.db.skip_vote().identity().delete(ctx.sender());
+
+    if let Some(mut state) = ctx.db.round_state().room_code().find(room_code.clone()) {
+        if state.locked_by == Some(ctx.sender()) {
+            state.locked_by = None;
+            state.locked_by_name = None;
+            state.buzz_timestamp = None;
+            ctx.db.round_state().room_code().update(state);
+            if room.status == STATUS_PAUSED {
+                ctx.db.room().code().update(Room {
+                    status: STATUS_PLAYING.to_string(),
+                    ..room
+                });
+            }
+        }
+    }
+
+    if end_game_if_no_active_players(ctx, &room_code)? {
+        Ok(())
+    } else {
+        finish_round_if_all_online_players_voted_to_skip(ctx, &room_code)
+    }
 }
 
 #[spacetimedb::reducer]
@@ -806,6 +1100,9 @@ pub fn buzz_in(ctx: &ReducerContext, room_code: String) -> Result<(), String> {
     if player.room_code != room_code {
         return Err("You are not a member of this room".into());
     }
+    if player.eliminated || effective_score(&player) <= -3 {
+        return Err("You are eliminated from this game".into());
+    }
     if player.locked_out_this_round {
         return Err("You are locked out for this song".into());
     }
@@ -817,6 +1114,93 @@ pub fn buzz_in(ctx: &ReducerContext, room_code: String) -> Result<(), String> {
         status: STATUS_PAUSED.to_string(),
         ..room
     });
+    Ok(())
+}
+
+fn record_skip_vote(ctx: &ReducerContext, room_code: String, round: u32, identity: Identity) {
+    let vote = SkipVote {
+        identity,
+        room_code,
+        round,
+    };
+    if ctx.db.skip_vote().identity().find(vote.identity).is_some() {
+        ctx.db.skip_vote().identity().update(vote);
+    } else {
+        ctx.db.skip_vote().insert(vote);
+    }
+}
+
+fn finish_round_if_all_online_players_voted_to_skip(
+    ctx: &ReducerContext,
+    room_code: &str,
+) -> Result<(), String> {
+    let room = ctx
+        .db
+        .room()
+        .code()
+        .find(room_code.to_string())
+        .ok_or_else(|| "Room not found".to_string())?;
+    if room.status != STATUS_PLAYING && room.status != STATUS_PAUSED {
+        return Ok(());
+    }
+
+    let online_players: Vec<Player> = ctx
+        .db
+        .player()
+        .room_code()
+        .filter(room_code)
+        .filter(|player| {
+            !player.eliminated
+                && effective_score(player) > -3
+                && ctx
+                    .db
+                    .presence_session()
+                    .identity()
+                    .filter(player.identity)
+                    .next()
+                    .is_some()
+        })
+        .collect();
+    if online_players.is_empty() {
+        return Ok(());
+    }
+
+    let skip_vote_count = online_players
+        .iter()
+        .filter(|player| {
+            ctx.db
+                .skip_vote()
+                .identity()
+                .find(player.identity)
+                .is_some_and(|vote| vote.room_code == room_code && vote.round == room.current_round)
+        })
+        .count();
+
+    if skip_vote_count == online_players.len() {
+        let mut state = ctx
+            .db
+            .round_state()
+            .room_code()
+            .find(room_code.to_string())
+            .ok_or_else(|| "Round state not found".to_string())?;
+        let secret = ctx
+            .db
+            .song_secret()
+            .room_code()
+            .filter(room_code)
+            .next()
+            .ok_or_else(|| "Song secret not found".to_string())?;
+        state.revealed_track_name = Some(secret.track_name);
+        state.revealed_artist_name = Some(secret.artist_name);
+        state.locked_by = None;
+        state.locked_by_name = None;
+        state.buzz_timestamp = None;
+        ctx.db.round_state().room_code().update(state);
+        ctx.db.room().code().update(Room {
+            status: STATUS_ROUND_OVER.to_string(),
+            ..room
+        });
+    }
     Ok(())
 }
 
@@ -841,6 +1225,9 @@ pub fn vote_skip(ctx: &ReducerContext, room_code: String) -> Result<(), String> 
     if player.room_code != room_code {
         return Err("You are not a member of this room".into());
     }
+    if player.eliminated || effective_score(&player) <= -3 {
+        return Err("You are eliminated from this game".into());
+    }
     if ctx
         .db
         .skip_vote()
@@ -851,51 +1238,8 @@ pub fn vote_skip(ctx: &ReducerContext, room_code: String) -> Result<(), String> 
         return Err("You have already voted to skip this song".into());
     }
 
-    let vote = SkipVote {
-        identity: ctx.sender(),
-        room_code: room_code.clone(),
-        round: room.current_round,
-    };
-    if ctx.db.skip_vote().identity().find(ctx.sender()).is_some() {
-        ctx.db.skip_vote().identity().update(vote);
-    } else {
-        ctx.db.skip_vote().insert(vote);
-    }
-
-    let player_count = ctx.db.player().room_code().filter(&room_code).count();
-    let skip_vote_count = ctx
-        .db
-        .skip_vote()
-        .room_code()
-        .filter(&room_code)
-        .filter(|vote| vote.round == room.current_round)
-        .count();
-    if skip_vote_count == player_count {
-        let mut state = ctx
-            .db
-            .round_state()
-            .room_code()
-            .find(room_code.clone())
-            .ok_or_else(|| "Round state not found".to_string())?;
-        let secret = ctx
-            .db
-            .song_secret()
-            .room_code()
-            .filter(&room_code)
-            .next()
-            .ok_or_else(|| "Song secret not found".to_string())?;
-        state.revealed_track_name = Some(secret.track_name);
-        state.revealed_artist_name = Some(secret.artist_name);
-        state.locked_by = None;
-        state.locked_by_name = None;
-        state.buzz_timestamp = None;
-        ctx.db.round_state().room_code().update(state);
-        ctx.db.room().code().update(Room {
-            status: STATUS_ROUND_OVER.to_string(),
-            ..room
-        });
-    }
-    Ok(())
+    record_skip_vote(ctx, room_code.clone(), room.current_round, ctx.sender());
+    finish_round_if_all_online_players_voted_to_skip(ctx, &room_code)
 }
 
 #[spacetimedb::reducer]
@@ -939,6 +1283,9 @@ pub fn submit_guess(
     if player.room_code != room_code {
         return Err("You are not a member of this room".into());
     }
+    if player.eliminated || effective_score(&player) <= -3 {
+        return Err("You are eliminated from this game".into());
+    }
     let secret = ctx
         .db
         .song_secret()
@@ -957,6 +1304,9 @@ pub fn submit_guess(
         ctx.db.round_state().room_code().update(RoundState {
             revealed_track_name: Some(secret.track_name),
             revealed_artist_name: Some(secret.artist_name),
+            last_guess_result: Some("CORRECT".to_string()),
+            last_guess_player_name: Some(player_name.clone()),
+            guess_result_sequence: state.guess_result_sequence.wrapping_add(1),
             ..state
         });
         if score >= i64::from(room.target_score) {
@@ -973,7 +1323,10 @@ pub fn submit_guess(
         }
     } else {
         let mut player = player;
-        adjust_score(&mut player, -1)?;
+        let player_name = player.name.clone();
+        let score = adjust_score(&mut player, -1)?;
+        let eliminated = score <= -3;
+        player.eliminated = eliminated;
         player.correct_streak = 0;
         player.locked_out_this_round = true;
         ctx.db.player().identity().update(player);
@@ -981,11 +1334,19 @@ pub fn submit_guess(
         state.locked_by = None;
         state.locked_by_name = None;
         state.buzz_timestamp = None;
+        state.last_guess_result = Some(if eliminated { "ELIMINATED" } else { "WRONG" }.to_string());
+        state.last_guess_player_name = Some(player_name);
+        state.guess_result_sequence = state.guess_result_sequence.wrapping_add(1);
         ctx.db.round_state().room_code().update(state);
+        let round = room.current_round;
         ctx.db.room().code().update(Room {
             status: STATUS_PLAYING.to_string(),
             ..room
         });
+        record_skip_vote(ctx, room_code.clone(), round, ctx.sender());
+        if !end_game_if_no_active_players(ctx, &room_code)? {
+            finish_round_if_all_online_players_voted_to_skip(ctx, &room_code)?;
+        }
     }
     Ok(())
 }
@@ -1005,7 +1366,7 @@ pub fn guess_timeout(ctx: &ReducerContext, room_code: String) -> Result<(), Stri
         .buzz_timestamp
         .ok_or_else(|| "Guess timer is missing".to_string())?;
     if ctx.timestamp < started_at + TimeDuration::from_micros(GUESS_WINDOW_MICROS) {
-        return Err("The ten-second guess window has not expired".into());
+        return Err("The fifteen-second guess window has not expired".into());
     }
     expire_guess(ctx, &room_code)
 }

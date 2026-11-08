@@ -17,4 +17,6 @@ export default __t.row({
   score: __t.i64(),
   lockedOutThisRound: __t.bool().name("locked_out_this_round"),
   correctStreak: __t.u32().name("correct_streak"),
+  online: __t.bool(),
+  eliminated: __t.bool(),
 });

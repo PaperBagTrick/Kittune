@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useReducer, useSpacetimeDB, useTable } from 'spacetimedb/react';
 import { reducers, tables } from '../module_bindings';
 import SongSearchModal from '../components/SongSearchModal';
+import GuessResultOverlay from '../components/GuessResultOverlay';
 
 type Props = { onBack: () => void };
 
@@ -19,10 +20,11 @@ export default function PlayerView({ onBack }: Props) {
   const submitGuess = useReducer(reducers.submitGuess);
   const guessTimeout = useReducer(reducers.guessTimeout);
   const voteSkip = useReducer(reducers.voteSkip);
+  const quitRoom = useReducer(reducers.quitRoom);
   const [roomCodeInput, setRoomCodeInput] = useState(() => new URLSearchParams(location.search).get('join')?.toUpperCase().slice(0, 4) ?? '');
   const [nameInput, setNameInput] = useState('');
   const [roomCode, setRoomCode] = useState('');
-  const [secondsLeft, setSecondsLeft] = useState(10);
+  const [secondsLeft, setSecondsLeft] = useState(15);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [votingToSkip, setVotingToSkip] = useState(false);
@@ -61,7 +63,7 @@ export default function PlayerView({ onBack }: Props) {
       timeoutSent.current = false;
       return;
     }
-    const deadline = Date.now() + 10_000;
+    const deadline = Date.now() + 15_000;
     const update = () => {
       const remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
       setSecondsLeft(remaining);
@@ -71,7 +73,7 @@ export default function PlayerView({ onBack }: Props) {
       }
     };
     timeoutSent.current = false;
-    setSecondsLeft(10);
+    setSecondsLeft(15);
     const timer = window.setInterval(update, 100);
     return () => window.clearInterval(timer);
   }, [isMyTurn, roomCode, guessTimeout]);
@@ -90,9 +92,17 @@ export default function PlayerView({ onBack }: Props) {
       .sort((a, b) => (a.score === b.score ? a.name.localeCompare(b.name) : a.score > b.score ? -1 : 1)),
     [players, roomCode],
   );
+  const onlinePlayers = useMemo(() => sortedPlayers.filter((player) => player.online && !player.eliminated), [sortedPlayers]);
+  const onlinePlayerIdentities = useMemo(
+    () => new Set(onlinePlayers.map((player) => player.identity.toHexString())),
+    [onlinePlayers],
+  );
   const roundSkipVotes = useMemo(
-    () => skipVotes.filter((vote) => vote.roomCode === roomCode && vote.round === room?.currentRound),
-    [skipVotes, roomCode, room?.currentRound],
+    () => skipVotes.filter((vote) =>
+      vote.roomCode === roomCode
+      && vote.round === room?.currentRound
+      && onlinePlayerIdentities.has(vote.identity.toHexString())),
+    [skipVotes, roomCode, room?.currentRound, onlinePlayerIdentities],
   );
   const skipVoteKey = `${roomCode}:${room?.currentRound ?? ''}`;
   const hasServerSkipVote = roundSkipVotes.some((vote) => vote.identity.toHexString() === identityHex);
@@ -169,6 +179,20 @@ export default function PlayerView({ onBack }: Props) {
     }
   }
 
+  async function quit() {
+    setError('');
+    if (!roomCode) {
+      onBack();
+      return;
+    }
+    try {
+      await quitRoom();
+      onBack();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not leave the room.');
+    }
+  }
+
   if (!roomCode) {
     return (
       <main className="player-shell player-join-shell">
@@ -203,12 +227,12 @@ export default function PlayerView({ onBack }: Props) {
   }
 
   if (!myPlayer) {
-    return <main className="player-shell"><header className="player-topbar"><button className="wordmark" onClick={onBack}><span>🐾</span> KITTUNE</button></header><section className="player-center panel"><span className="spinner" /> Joining room {roomCode}…</section></main>;
+    return <main className="player-shell"><header className="player-topbar"><button className="wordmark" onClick={() => void quit()}><span>🐾</span> KITTUNE</button><button className="button button-secondary quit-room-button" onClick={() => void quit()}>Quit game</button></header><section className="player-center panel"><span className="spinner" /> Joining room {roomCode}…</section>{error && <div className="toast-error" role="status">{error}<button onClick={() => setError('')}>×</button></div>}</main>;
   }
 
   return (
     <main className={`player-shell ${isMyTurn ? 'player-my-turn' : ''}`}>
-      <header className="player-topbar"><button className="wordmark" onClick={onBack}><span>🐾</span> KITTUNE</button><span className="room-mini">ROOM <b>{roomCode}</b></span><span className="player-score-pill">{myPlayer.name}{myPlayer.correctStreak >= 3 && <span className="streak-fire" title={`${myPlayer.correctStreak} correct guesses in a row`}>🔥</span>} <b>{myPlayer.score.toString()} pts</b></span></header>
+      <header className="player-topbar"><button className="wordmark" onClick={() => void quit()}><span>🐾</span> KITTUNE</button><span className="room-mini">ROOM <b>{roomCode}</b></span><span className="player-score-pill">{myPlayer.name}{myPlayer.correctStreak >= 3 && <span className="streak-fire" title={`${myPlayer.correctStreak} correct guesses in a row`}>🔥</span>} <b>{myPlayer.score.toString()} pts</b>{myPlayer.eliminated && <small className="eliminated-badge">OUT</small>}</span><button className="button button-secondary quit-room-button" onClick={() => void quit()}>Quit game</button></header>
       {!room ? (
         <section className="player-center panel"><span className="spinner" /> Finding room {roomCode}…</section>
       ) : room.status === 'LOBBY' ? (
@@ -218,7 +242,7 @@ export default function PlayerView({ onBack }: Props) {
           <div className="game-main">
             <div className="game-meta"><span className="panel-kicker">ROUND {room.currentRound + 1}</span><span className="game-status">{room.status.replaceAll('_', ' ')}</span></div>
             {room.status === 'GAME_OVER' ? (
-              <div className="winner-screen panel"><div className="confetti">✦ ✧ ✨ ✦</div><span className="winner-paw">🏆</span><p className="panel-kicker">THE TOP CAT</p><h1>{room.winnerName} <em>wins!</em></h1><p>What a game. The crown stays with the cat.</p>{roundState?.revealedTrackName && <div className="final-track-reveal"><img src={roundState.artworkUrl} alt="Album artwork" /><span><b>{roundState.revealedTrackName}</b><small>{roundState.revealedArtistName}</small></span></div>}</div>
+              <div className="winner-screen panel">{room.winnerName && <div className="confetti">✦ ✧ ✨ ✦</div>}<span className="winner-paw">{room.winnerName ? '🏆' : '🐾'}</span><p className="panel-kicker">{room.winnerName ? 'THE TOP CAT' : 'GAME OVER'}</p><h1>{room.winnerName ? <>{room.winnerName} <em>wins!</em></> : <>Everyone’s <em>out.</em></>}</h1><p>{room.winnerName ? 'What a game. The crown stays with the cat.' : 'No players remain in the game.'}</p>{roundState?.revealedTrackName && <div className="final-track-reveal"><img src={roundState.artworkUrl} alt="Album artwork" /><span><b>{roundState.revealedTrackName}</b><small>{roundState.revealedArtistName}</small></span></div>}</div>
             ) : room.status === 'PAUSED_FOR_GUESS' ? (
               <div className="buzz-banner panel"><div className="buzz-ripple">🐾</div><p className="panel-kicker">{isMyTurn ? 'YOU GOT THE BUZZER' : 'THE BUZZER HAS SPOKEN'}</p><h1>{isMyTurn ? <>Quick! Name<br /><em>that tune!</em></> : <>{otherPlayer?.name ?? roundState?.lockedByName ?? 'A player'}<br /><em>PAWED THE BUZZER!</em></>}</h1><p>{isMyTurn ? 'Choose a track before the timer runs out.' : 'Can they name that tune?'}</p></div>
             ) : room.status === 'ROUND_OVER' ? (
@@ -228,16 +252,16 @@ export default function PlayerView({ onBack }: Props) {
               </div>
             ) : (
               <div className="playing-card panel">
-                <div className="playing-copy"><span className="sound-bars"><i /><i /><i /><i /><i /><i /></span><span className="panel-kicker">LISTEN CLOSELY</span><h1>What’s<br /><em>that sound?</em></h1><p>The first paw to the buzzer gets ten seconds to name the track.</p><div className="audio-indicator"><i /> AUDIO IS LIVE</div></div>
-                <button className="paw-button host-paw-button" onClick={() => void paw()} disabled={myPlayer.lockedOutThisRound} aria-label="Paw the buzzer"><span>🐾</span><b>{myPlayer.lockedOutThisRound ? 'SCRATCHED' : 'PAW IN'}</b></button>
+                <div className="playing-copy"><span className="sound-bars"><i /><i /><i /><i /><i /><i /></span><span className="panel-kicker">LISTEN CLOSELY</span><h1>What’s<br /><em>that sound?</em></h1><p>The first paw to the buzzer gets fifteen seconds to name the track.</p><div className="audio-indicator"><i /> AUDIO IS LIVE</div></div>
+                <button className="paw-button host-paw-button" onClick={() => void paw()} disabled={myPlayer.lockedOutThisRound || myPlayer.eliminated} aria-label="Paw the buzzer"><span>🐾</span><b>{myPlayer.eliminated ? 'OUT' : myPlayer.lockedOutThisRound ? 'SCRATCHED' : 'PAW IN'}</b></button>
                 {audioBlocked && <button className="audio-enable" onClick={() => { void audioRef.current?.play().then(() => setAudioBlocked(false)).catch(() => setAudioBlocked(true)); }}>Tap to enable audio</button>}
               </div>
             )}
             {(room.status === 'PLAYING' || room.status === 'PAUSED_FOR_GUESS') && (
               <div className="skip-vote-panel panel">
-                <span><b>{displayedSkipVotes} / {sortedPlayers.length}</b> votes to skip</span>
-                <button className="button button-secondary" onClick={() => void skipSong()} disabled={hasVotedToSkip || votingToSkip}>
-                  {hasVotedToSkip ? 'Vote recorded' : votingToSkip ? 'Voting…' : 'Vote to skip'}
+                <span><b>{displayedSkipVotes} / {onlinePlayers.length}</b> votes to skip</span>
+                <button className="button button-secondary" onClick={() => void skipSong()} disabled={hasVotedToSkip || votingToSkip || myPlayer.eliminated}>
+                  {myPlayer.eliminated ? 'Eliminated' : hasVotedToSkip ? 'Vote recorded' : votingToSkip ? 'Voting…' : 'Vote to skip'}
                 </button>
               </div>
             )}
@@ -245,7 +269,7 @@ export default function PlayerView({ onBack }: Props) {
           <aside className="scoreboard panel">
             <div className="panel-heading"><div><span className="panel-kicker">THE LEADERBOARD</span><h2>Scoreboard</h2></div><span className="score-trophy">🏆</span></div>
             <div className="score-list">
-              {sortedPlayers.map((player, index) => <div key={player.identity.toHexString()} className={`score-row ${index === 0 && player.score > 0n ? 'score-leader' : ''}`}><span className="rank">{String(index + 1).padStart(2, '0')}</span><span className={`avatar avatar-${index % 5}`}>{['🐱', '🐈', '😼', '🐾', '😺'][index % 5]}</span><span className="player-name"><span className="player-label">{player.name}</span>{player.correctStreak >= 3 && <span className="streak-fire" title={`${player.correctStreak} correct guesses in a row`}>🔥</span>}</span><span className="score-number">{player.score.toString()}</span></div>)}
+              {sortedPlayers.map((player, index) => <div key={player.identity.toHexString()} className={`score-row ${index === 0 && player.score > 0n ? 'score-leader' : ''} ${player.eliminated ? 'is-eliminated' : ''}`}><span className="rank">{String(index + 1).padStart(2, '0')}</span><span className={`avatar avatar-${index % 5}`}>{['🐱', '🐈', '😼', '🐾', '😺'][index % 5]}</span><span className="player-name"><span className={`presence-indicator ${player.online ? 'is-online' : 'is-offline'}`} role="img" aria-label={player.online ? 'Online' : 'Offline'} title={player.online ? 'Online' : 'Offline'} /><span className="player-label">{player.name}</span>{player.eliminated && <small className="eliminated-badge">OUT</small>}{player.correctStreak >= 3 && <span className="streak-fire" title={`${player.correctStreak} correct guesses in a row`}>🔥</span>}</span><span className="score-number">{player.score.toString()}</span></div>)}
               {sortedPlayers.length === 0 && <p className="muted-note">No players yet.</p>}
             </div>
             <div className="target-progress"><span>FIRST TO {room.targetScore}</span><div className="target-dots">{Array.from({ length: room.targetScore }, (_, index) => <i key={index} className={sortedPlayers.some((player) => player.score > BigInt(index)) ? 'filled' : ''} />)}</div></div>
@@ -254,7 +278,8 @@ export default function PlayerView({ onBack }: Props) {
       )}
       <footer className="host-footer"><span>ROOM <b>{roomCode}</b></span><span>🎧 &nbsp; Turn it up. Keep it kind.</span><span>KITTUNE <b>✦</b></span></footer>
       {error && <div className="toast-error" role="status">{error}<button onClick={() => setError('')}>×</button></div>}
-      {isMyTurn && <SongSearchModal secondsLeft={secondsLeft} onSelect={guess} />}
+      {isMyTurn && <SongSearchModal secondsLeft={secondsLeft} onSelect={guess} preferredTrackId={roundState?.guessTargetTrackId} />}
+      {roomCode && <GuessResultOverlay roomCode={roomCode} round={room?.currentRound ?? -1} result={roundState?.lastGuessResult} playerName={roundState?.lastGuessPlayerName} sequence={roundState?.guessResultSequence ?? 0} />}
       {roomCode && roundState && roundAudio && <audio ref={audioRef} src={roundAudio.audioUrl} />}
     </main>
   );

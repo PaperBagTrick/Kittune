@@ -36,12 +36,14 @@ import {
 // Import all reducer arg schemas
 import BuzzInReducer from "./buzz_in_reducer";
 import CreateRoomReducer from "./create_room_reducer";
+import CreateRoomWithCatalogReducer from "./create_room_with_catalog_reducer";
 import EndGameReducer from "./end_game_reducer";
 import GuessTimeoutReducer from "./guess_timeout_reducer";
 import HostHeartbeatReducer from "./host_heartbeat_reducer";
 import JoinPublicRoomReducer from "./join_public_room_reducer";
 import JoinRoomReducer from "./join_room_reducer";
 import NextRoundReducer from "./next_round_reducer";
+import QuitRoomReducer from "./quit_room_reducer";
 import SongEndedReducer from "./song_ended_reducer";
 import StartGameReducer from "./start_game_reducer";
 import SubmitGuessReducer from "./submit_guess_reducer";
@@ -50,6 +52,7 @@ import VoteSkipReducer from "./vote_skip_reducer";
 // Import all procedure arg schemas
 
 // Import all table schema definitions
+import AvailableSongCatalogsRow from "./available_song_catalogs_table";
 import HostRoundAudioRow from "./host_round_audio_table";
 import MyRoomRow from "./my_room_table";
 import PlayerRoundAudioRow from "./player_round_audio_table";
@@ -62,6 +65,13 @@ import SkipVotesForMyRoomRow from "./skip_votes_for_my_room_table";
 
 /** The schema information for all tables in this module. This is defined the same was as the tables would have been defined in the server. */
 const tablesSchema = __schema({
+  availableSongCatalogs: __table({
+    name: 'available_song_catalogs',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, AvailableSongCatalogsRow),
   hostRoundAudio: __table({
     name: 'host_round_audio',
     indexes: [
@@ -117,12 +127,14 @@ const tablesSchema = __schema({
 const reducersSchema = __reducers(
   __reducerSchema("buzz_in", BuzzInReducer),
   __reducerSchema("create_room", CreateRoomReducer),
+  __reducerSchema("create_room_with_catalog", CreateRoomWithCatalogReducer),
   __reducerSchema("end_game", EndGameReducer),
   __reducerSchema("guess_timeout", GuessTimeoutReducer),
   __reducerSchema("host_heartbeat", HostHeartbeatReducer),
   __reducerSchema("join_public_room", JoinPublicRoomReducer),
   __reducerSchema("join_room", JoinRoomReducer),
   __reducerSchema("next_round", NextRoundReducer),
+  __reducerSchema("quit_room", QuitRoomReducer),
   __reducerSchema("song_ended", SongEndedReducer),
   __reducerSchema("start_game", StartGameReducer),
   __reducerSchema("submit_guess", SubmitGuessReducer),
@@ -135,6 +147,8 @@ const proceduresSchema = __procedures(
 
 type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "tables"> & {
   tables: typeof tablesSchema.schemaType.tables & {
+    /** @deprecated Use `availableSongCatalogs` instead. This alias will be removed in the next major version. */
+    readonly "available_song_catalogs": Omit<typeof tablesSchema.schemaType.tables["availableSongCatalogs"], "accessorName"> & { readonly accessorName: "available_song_catalogs" };
     /** @deprecated Use `hostRoundAudio` instead. This alias will be removed in the next major version. */
     readonly "host_round_audio": Omit<typeof tablesSchema.schemaType.tables["hostRoundAudio"], "accessorName"> & { readonly accessorName: "host_round_audio" };
     /** @deprecated Use `myRoom` instead. This alias will be removed in the next major version. */
@@ -167,6 +181,7 @@ const REMOTE_MODULE = {
 >;
 
 const tableAccessorAliases = {
+  "available_song_catalogs": "availableSongCatalogs",
   "host_round_audio": "hostRoundAudio",
   "my_room": "myRoom",
   "player_round_audio": "playerRoundAudio",
@@ -194,6 +209,8 @@ function __withTableAccessorAliases<T extends object>(target: T, freeze = false)
 
 type __DbViewBase = __DbConnectionImpl<typeof REMOTE_MODULE>["db"];
 export type DbView = __DbViewBase & {
+  /** @deprecated Use `availableSongCatalogs` instead. This alias will be removed in the next major version. */
+  readonly "available_song_catalogs": __DbViewBase["availableSongCatalogs"];
   /** @deprecated Use `hostRoundAudio` instead. This alias will be removed in the next major version. */
   readonly "host_round_audio": __DbViewBase["hostRoundAudio"];
   /** @deprecated Use `myRoom` instead. This alias will be removed in the next major version. */
@@ -212,6 +229,8 @@ export type DbView = __DbViewBase & {
 
 type __TablesBase = __QueryBuilder<typeof tablesSchema.schemaType>;
 export type Tables = __TablesBase & {
+  /** @deprecated Use `availableSongCatalogs` instead. This alias will be removed in the next major version. */
+  readonly "available_song_catalogs": __TablesBase["availableSongCatalogs"];
   /** @deprecated Use `hostRoundAudio` instead. This alias will be removed in the next major version. */
   readonly "host_round_audio": __TablesBase["hostRoundAudio"];
   /** @deprecated Use `myRoom` instead. This alias will be removed in the next major version. */

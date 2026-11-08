@@ -10,9 +10,10 @@ type SearchResult = {
 type Props = {
   secondsLeft: number;
   onSelect: (trackId: number) => Promise<void>;
+  preferredTrackId?: bigint | null;
 };
 
-export default function SongSearchModal({ secondsLeft, onSelect }: Props) {
+export default function SongSearchModal({ secondsLeft, onSelect, preferredTrackId }: Props) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -49,6 +50,13 @@ export default function SongSearchModal({ secondsLeft, onSelect }: Props) {
     return () => { window.clearTimeout(timer); controller.abort(); };
   }, [query]);
 
+  const preferredResult = preferredTrackId == null
+    ? undefined
+    : results.find((result) => BigInt(result.trackId) === preferredTrackId);
+  const orderedResults = preferredResult
+    ? [preferredResult, ...results.filter((result) => result.trackId !== preferredResult.trackId)]
+    : results;
+
   return (
     <div className="modal-backdrop" role="presentation">
       <section className="guess-modal" role="dialog" aria-modal="true" aria-labelledby="guess-title">
@@ -60,8 +68,8 @@ export default function SongSearchModal({ secondsLeft, onSelect }: Props) {
         <div className="search-results" aria-live="polite">
           {loading && <p className="search-message"><span className="spinner" /> Searching iTunes…</p>}
           {!loading && error && <p className="search-message">{error}</p>}
-          {!loading && results.map((result) => (
-            <button className="search-result" key={result.trackId} onClick={() => void onSelect(result.trackId)}>
+          {!loading && orderedResults.map((result, index) => (
+            <button className={`search-result ${index === 0 ? 'search-result-primary' : ''}`} key={result.trackId} onClick={() => void onSelect(result.trackId)}>
               <img src={result.artworkUrl100} alt="" />
               <span><b>{result.trackName}</b><small>{result.artistName}</small></span>
               <span className="result-arrow">→</span>
