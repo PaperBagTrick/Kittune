@@ -244,7 +244,7 @@ struct SeedCatalog {
     json: &'static str,
 }
 
-fn bundled_catalogs() -> [SeedCatalog; 2] {
+fn bundled_catalogs() -> [SeedCatalog; 5] {
     [
         SeedCatalog {
             catalog_id: DEFAULT_CATALOG_ID,
@@ -259,6 +259,27 @@ fn bundled_catalogs() -> [SeedCatalog; 2] {
             description: "A curated set of familiar nursery rhymes and children's songs.",
             quality_note: "Each rhyme uses one selected recording. Many versions sound alike, and short previews can be generic or uneven.",
             json: include_str!("../../seeds/seed_nursery_rhymes.json"),
+        },
+        SeedCatalog {
+            catalog_id: "movie-soundtracks",
+            name: "Movie Soundtracks",
+            description: "Thirty recognizable songs featured in popular films.",
+            quality_note: "Includes songs from a range of movie genres and eras; previews vary by recording.",
+            json: include_str!("../../seeds/seed_movie_soundtracks.json"),
+        },
+        SeedCatalog {
+            catalog_id: "2010s-hits",
+            name: "2010s Hits",
+            description: "Thirty popular tracks released during the 2010s.",
+            quality_note: "A mix of pop, hip-hop, and dance hits; previews vary by recording.",
+            json: include_str!("../../seeds/seed_2010s_hits.json"),
+        },
+        SeedCatalog {
+            catalog_id: "k-pop",
+            name: "K-Pop",
+            description: "Thirty popular K-pop tracks with English or Latin-script titles.",
+            quality_note: "Song titles are shown in English or romanized form; previews vary by recording.",
+            json: include_str!("../../seeds/seed_kpop.json"),
         },
     ]
 }

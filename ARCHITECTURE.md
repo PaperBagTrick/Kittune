@@ -65,6 +65,9 @@ Use the client for screen layout, styling, audio element behavior, search/select
 | `spacetimedb/src/lib.rs` | Server tables, views, reducers, seed loading, game rules, and round lifecycle. This is the main backend implementation file. |
 | `seeds/seed_catalog.json` | Bundled Top 1000 song metadata, including the iTunes preview URLs. |
 | `seeds/seed_nursery_rhymes.json` | One selected iTunes recording and preview URL for each nursery rhyme in that list. |
+| `seeds/seed_movie_soundtracks.json` | Thirty iTunes tracks featured in popular movie soundtracks. |
+| `seeds/seed_2010s_hits.json` | Thirty iTunes tracks released during the 2010s. |
+| `seeds/seed_kpop.json` | Thirty K-pop tracks with English or Latin-script track titles. |
 | `AGENTS.md` / `CLAUDE.md` | SpacetimeDB and coding-agent reference notes; these are guidance documents, not runtime code. |
 
 ### Data stored by the module
@@ -126,7 +129,7 @@ The known score compatibility case is already handled in code: keep `player.scor
 
 ## Song data and the optional utility
 
-The live game's curated song catalog is `server/seeds/seed_catalog.json`, loaded into `catalog_song` by the module. The seed is applied when the catalog is empty; editing the JSON does not automatically overwrite rows already stored in a database. To change an existing catalog, plan an explicit data update/migration rather than assuming a module publish will reseed it.
+The live game's bundled song catalogs are defined in `server/spacetimedb/src/lib.rs` and their track metadata is stored in the corresponding JSON files under `server/seeds/`. The module registers each catalog and adds missing song and catalog-entry rows without deleting existing data. Changes to an already-registered catalog are not automatically applied to existing rows; plan an explicit data update rather than assuming a module publish will overwrite them.
 
 `cre/song_picker.py` is separate from that seed flow. It searches Deezer and iTunes, selects a random result, and writes `cre/output/track.json` plus `cre/logs/song_picker.log` when run. It does not automatically add the selected song to any SpacetimeDB catalog. `cre/README.md` documents how to run it.
 
