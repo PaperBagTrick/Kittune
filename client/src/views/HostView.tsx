@@ -41,6 +41,7 @@ export default function HostView({ onBack }: Props) {
   const [secondsLeft, setSecondsLeft] = useState(10);
   const [votingToSkip, setVotingToSkip] = useState(false);
   const [submittedSkipVote, setSubmittedSkipVote] = useState('');
+  const [roomLoadTimedOut, setRoomLoadTimedOut] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
   const timeoutSent = useRef(false);
 
@@ -185,6 +186,13 @@ export default function HostView({ onBack }: Props) {
   const isHost = Boolean(room && identity && room.hostIdentity.toHexString() === identity.toHexString());
 
   useEffect(() => {
+    setRoomLoadTimedOut(false);
+    if (!roomCode || (room && isHost)) return;
+    const timer = window.setTimeout(() => setRoomLoadTimedOut(true), 15_000);
+    return () => window.clearTimeout(timer);
+  }, [roomCode, Boolean(room), isHost]);
+
+  useEffect(() => {
     if (!roomCode || !isHost) return;
     const heartbeat = () => {
       void hostHeartbeat({ roomCode }).catch((cause: unknown) => {
@@ -218,7 +226,17 @@ export default function HostView({ onBack }: Props) {
           {error && <p className="error-note">{error}</p>}
         </section>
       ) : !room || !isHost ? (
-        <section className="panel waiting-panel"><span className="spinner" /> Connecting to room {roomCode}…</section>
+        <section className="panel waiting-panel">
+          {roomLoadTimedOut ? (
+            <>
+              <h2>Couldn’t connect to room {roomCode}</h2>
+              <p>The server did not return the room data this screen needs. Its module may be out of date with this client. Ask the database owner to publish the latest server module without deleting data, then try again.</p>
+              <button className="button button-secondary" onClick={() => { setRoomCode(''); setError(''); }}>Back to room setup</button>
+            </>
+          ) : (
+            <><span className="spinner" /> Connecting to room {roomCode}…</>
+          )}
+        </section>
       ) : room.status === 'LOBBY' ? (
         <section className="lobby-layout">
           <div className="lobby-main panel">
