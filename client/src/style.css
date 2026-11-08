@@ -1795,7 +1795,7 @@ button:disabled {
 
     .hero-copy {
         width: 100%;
-        padding: 57px 0
+        padding: 180px 0 57px
     }
 
     .hero-copy h1 {
@@ -1805,6 +1805,13 @@ button:disabled {
     .tunee-hero img {
         width: 90%;
         height: 90%;
+    }
+
+    .tunee-hero {
+        top: 90px;
+        right: 10px;
+        width: clamp(112px, 30vw, 150px);
+        transform: none;
     }
 
     .hero-note {
@@ -1974,7 +1981,19 @@ button:disabled {
     }
 
     .playing-card .host-paw-button {
-        width: min(25vw, 190px)
+        width: clamp(68px, 20vw, 96px);
+        height: clamp(68px, 20vw, 96px);
+        flex: 0 0 clamp(68px, 20vw, 96px);
+        margin-left: 12px;
+    }
+
+    .playing-card .host-paw-button span {
+        font-size: 30px;
+    }
+
+    .playing-card .host-paw-button b {
+        font-size: 9px;
+        letter-spacing: .06em;
     }
 
     .player-bottom {
