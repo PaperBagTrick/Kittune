@@ -16,13 +16,18 @@ export default function App() {
     <main className="landing-shell">
       <div className="landing-orbit orbit-one" />
       <div className="landing-orbit orbit-two" />
+      <div className="tunee-hero" aria-hidden="true">
+        <span className="tunee-pulse tunee-pulse-one" />
+        <span className="tunee-pulse tunee-pulse-two" />
+        <img src="/Tunee.png" alt="" />
+      </div>
       <header className="brand-lockup">
         <span className="brand-mark" aria-hidden="true">🐾</span>
         <span>KITTUNE</span>
       </header>
       <section className="hero-copy">
-        <p className="eyebrow">THE MUSIC GAME WITH CLAWS</p>
-        <h1>Hear it.<br /><span>Know it.</span><br />Paw the buzzer.</h1>
+        <p className="eyebrow">Multiplayer MUSIC GAME</p>
+        <h1>Hear it,<br /><span>Recognize it,</span><br />Paw the buzzer!</h1>
         <p className="hero-note">A little music, a lot of friendly competition.</p>
         <div className="entry-cards">
           <button className="entry-card entry-host" onClick={() => setScreen('host')}>

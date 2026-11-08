@@ -11,10 +11,10 @@ import {
 } from "spacetimedb";
 
 export default __t.row({
-  code: __t.string().primaryKey(),
-  hostIdentity: __t.identity().name("host_identity"),
-  status: __t.string(),
-  targetScore: __t.u32().name("target_score"),
-  currentRound: __t.u32().name("current_round"),
-  winnerName: __t.option(__t.string()).name("winner_name"),
+  identity: __t.identity().primaryKey(),
+  roomCode: __t.string().name("room_code"),
+  name: __t.string(),
+  score: __t.i32(),
+  correctStreak: __t.u32().name("correct_streak"),
+  lockedOutThisRound: __t.bool().name("locked_out_this_round"),
 });

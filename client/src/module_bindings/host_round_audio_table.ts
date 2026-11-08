@@ -13,10 +13,5 @@ import {
 export default __t.row({
   roomCode: __t.string().primaryKey().name("room_code"),
   audioUrl: __t.string().name("audio_url"),
-  artworkUrl: __t.string().name("artwork_url"),
-  lockedBy: __t.option(__t.identity()).name("locked_by"),
-  lockedByName: __t.option(__t.string()).name("locked_by_name"),
-  buzzTimestamp: __t.option(__t.timestamp()).name("buzz_timestamp"),
-  revealedTrackName: __t.option(__t.string()).name("revealed_track_name"),
-  revealedArtistName: __t.option(__t.string()).name("revealed_artist_name"),
+  trackId: __t.i64().name("track_id"),
 });

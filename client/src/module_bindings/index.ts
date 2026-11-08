@@ -36,72 +36,89 @@ import {
 // Import all reducer arg schemas
 import BuzzInReducer from "./buzz_in_reducer";
 import CreateRoomReducer from "./create_room_reducer";
+import EndGameReducer from "./end_game_reducer";
 import GuessTimeoutReducer from "./guess_timeout_reducer";
+import HostHeartbeatReducer from "./host_heartbeat_reducer";
+import JoinPublicRoomReducer from "./join_public_room_reducer";
 import JoinRoomReducer from "./join_room_reducer";
 import NextRoundReducer from "./next_round_reducer";
 import SongEndedReducer from "./song_ended_reducer";
 import StartGameReducer from "./start_game_reducer";
 import SubmitGuessReducer from "./submit_guess_reducer";
+import VoteSkipReducer from "./vote_skip_reducer";
 
 // Import all procedure arg schemas
 
 // Import all table schema definitions
-import PlayerRow from "./player_table";
-import RoomRow from "./room_table";
-import RoundStateRow from "./round_state_table";
+import HostRoundAudioRow from "./host_round_audio_table";
+import MyRoomRow from "./my_room_table";
+import PlayersInMyRoomRow from "./players_in_my_room_table";
+import PublicLobbiesRow from "./public_lobbies_table";
+import RoundStateForMyRoomRow from "./round_state_for_my_room_table";
+import SkipVotesForMyRoomRow from "./skip_votes_for_my_room_table";
 
 /** Type-only namespace exports for generated type groups. */
 
 /** The schema information for all tables in this module. This is defined the same was as the tables would have been defined in the server. */
 const tablesSchema = __schema({
-  player: __table({
-    name: 'player',
+  hostRoundAudio: __table({
+    name: 'host_round_audio',
     indexes: [
-      { accessor: 'identity', name: 'player_identity_idx_btree', algorithm: 'btree', columns: [
-        'identity',
-      ] },
-      { accessor: 'room_code', name: 'player_room_code_idx_btree', algorithm: 'btree', columns: [
-        'roomCode',
-      ] },
     ],
     constraints: [
-      { name: 'player_identity_key', constraint: 'unique', columns: ['identity'] },
     ],
-  }, PlayerRow),
-  room: __table({
-    name: 'room',
+  }, HostRoundAudioRow),
+  myRoom: __table({
+    name: 'my_room',
     indexes: [
-      { accessor: 'code', name: 'room_code_idx_btree', algorithm: 'btree', columns: [
-        'code',
-      ] },
     ],
     constraints: [
-      { name: 'room_code_key', constraint: 'unique', columns: ['code'] },
     ],
-  }, RoomRow),
-  roundState: __table({
-    name: 'round_state',
+  }, MyRoomRow),
+  playersInMyRoom: __table({
+    name: 'players_in_my_room',
     indexes: [
-      { accessor: 'room_code', name: 'round_state_room_code_idx_btree', algorithm: 'btree', columns: [
-        'roomCode',
-      ] },
     ],
     constraints: [
-      { name: 'round_state_room_code_key', constraint: 'unique', columns: ['roomCode'] },
     ],
-  }, RoundStateRow),
+  }, PlayersInMyRoomRow),
+  publicLobbies: __table({
+    name: 'public_lobbies',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, PublicLobbiesRow),
+  roundStateForMyRoom: __table({
+    name: 'round_state_for_my_room',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, RoundStateForMyRoomRow),
+  skipVotesForMyRoom: __table({
+    name: 'skip_votes_for_my_room',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, SkipVotesForMyRoomRow),
 });
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
   __reducerSchema("buzz_in", BuzzInReducer),
   __reducerSchema("create_room", CreateRoomReducer),
+  __reducerSchema("end_game", EndGameReducer),
   __reducerSchema("guess_timeout", GuessTimeoutReducer),
+  __reducerSchema("host_heartbeat", HostHeartbeatReducer),
+  __reducerSchema("join_public_room", JoinPublicRoomReducer),
   __reducerSchema("join_room", JoinRoomReducer),
   __reducerSchema("next_round", NextRoundReducer),
   __reducerSchema("song_ended", SongEndedReducer),
   __reducerSchema("start_game", StartGameReducer),
   __reducerSchema("submit_guess", SubmitGuessReducer),
+  __reducerSchema("vote_skip", VoteSkipReducer),
 );
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */
@@ -110,8 +127,18 @@ const proceduresSchema = __procedures(
 
 type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "tables"> & {
   tables: typeof tablesSchema.schemaType.tables & {
-    /** @deprecated Use `roundState` instead. This alias will be removed in the next major version. */
-    readonly "round_state": Omit<typeof tablesSchema.schemaType.tables["roundState"], "accessorName"> & { readonly accessorName: "round_state" };
+    /** @deprecated Use `hostRoundAudio` instead. This alias will be removed in the next major version. */
+    readonly "host_round_audio": Omit<typeof tablesSchema.schemaType.tables["hostRoundAudio"], "accessorName"> & { readonly accessorName: "host_round_audio" };
+    /** @deprecated Use `myRoom` instead. This alias will be removed in the next major version. */
+    readonly "my_room": Omit<typeof tablesSchema.schemaType.tables["myRoom"], "accessorName"> & { readonly accessorName: "my_room" };
+    /** @deprecated Use `playersInMyRoom` instead. This alias will be removed in the next major version. */
+    readonly "players_in_my_room": Omit<typeof tablesSchema.schemaType.tables["playersInMyRoom"], "accessorName"> & { readonly accessorName: "players_in_my_room" };
+    /** @deprecated Use `publicLobbies` instead. This alias will be removed in the next major version. */
+    readonly "public_lobbies": Omit<typeof tablesSchema.schemaType.tables["publicLobbies"], "accessorName"> & { readonly accessorName: "public_lobbies" };
+    /** @deprecated Use `roundStateForMyRoom` instead. This alias will be removed in the next major version. */
+    readonly "round_state_for_my_room": Omit<typeof tablesSchema.schemaType.tables["roundStateForMyRoom"], "accessorName"> & { readonly accessorName: "round_state_for_my_room" };
+    /** @deprecated Use `skipVotesForMyRoom` instead. This alias will be removed in the next major version. */
+    readonly "skip_votes_for_my_room": Omit<typeof tablesSchema.schemaType.tables["skipVotesForMyRoom"], "accessorName"> & { readonly accessorName: "skip_votes_for_my_room" };
   };
 };
 
@@ -130,7 +157,12 @@ const REMOTE_MODULE = {
 >;
 
 const tableAccessorAliases = {
-  "round_state": "roundState",
+  "host_round_audio": "hostRoundAudio",
+  "my_room": "myRoom",
+  "players_in_my_room": "playersInMyRoom",
+  "public_lobbies": "publicLobbies",
+  "round_state_for_my_room": "roundStateForMyRoom",
+  "skip_votes_for_my_room": "skipVotesForMyRoom",
 } as const;
 
 function __withTableAccessorAliases<T extends object>(target: T, freeze = false): T {
@@ -151,14 +183,34 @@ function __withTableAccessorAliases<T extends object>(target: T, freeze = false)
 
 type __DbViewBase = __DbConnectionImpl<typeof REMOTE_MODULE>["db"];
 export type DbView = __DbViewBase & {
-  /** @deprecated Use `roundState` instead. This alias will be removed in the next major version. */
-  readonly "round_state": __DbViewBase["roundState"];
+  /** @deprecated Use `hostRoundAudio` instead. This alias will be removed in the next major version. */
+  readonly "host_round_audio": __DbViewBase["hostRoundAudio"];
+  /** @deprecated Use `myRoom` instead. This alias will be removed in the next major version. */
+  readonly "my_room": __DbViewBase["myRoom"];
+  /** @deprecated Use `playersInMyRoom` instead. This alias will be removed in the next major version. */
+  readonly "players_in_my_room": __DbViewBase["playersInMyRoom"];
+  /** @deprecated Use `publicLobbies` instead. This alias will be removed in the next major version. */
+  readonly "public_lobbies": __DbViewBase["publicLobbies"];
+  /** @deprecated Use `roundStateForMyRoom` instead. This alias will be removed in the next major version. */
+  readonly "round_state_for_my_room": __DbViewBase["roundStateForMyRoom"];
+  /** @deprecated Use `skipVotesForMyRoom` instead. This alias will be removed in the next major version. */
+  readonly "skip_votes_for_my_room": __DbViewBase["skipVotesForMyRoom"];
 };
 
 type __TablesBase = __QueryBuilder<typeof tablesSchema.schemaType>;
 export type Tables = __TablesBase & {
-  /** @deprecated Use `roundState` instead. This alias will be removed in the next major version. */
-  readonly "round_state": __TablesBase["roundState"];
+  /** @deprecated Use `hostRoundAudio` instead. This alias will be removed in the next major version. */
+  readonly "host_round_audio": __TablesBase["hostRoundAudio"];
+  /** @deprecated Use `myRoom` instead. This alias will be removed in the next major version. */
+  readonly "my_room": __TablesBase["myRoom"];
+  /** @deprecated Use `playersInMyRoom` instead. This alias will be removed in the next major version. */
+  readonly "players_in_my_room": __TablesBase["playersInMyRoom"];
+  /** @deprecated Use `publicLobbies` instead. This alias will be removed in the next major version. */
+  readonly "public_lobbies": __TablesBase["publicLobbies"];
+  /** @deprecated Use `roundStateForMyRoom` instead. This alias will be removed in the next major version. */
+  readonly "round_state_for_my_room": __TablesBase["roundStateForMyRoom"];
+  /** @deprecated Use `skipVotesForMyRoom` instead. This alias will be removed in the next major version. */
+  readonly "skip_votes_for_my_room": __TablesBase["skipVotesForMyRoom"];
 };
 
 /** The tables available in this remote SpacetimeDB module. Each table reference doubles as a query builder. */

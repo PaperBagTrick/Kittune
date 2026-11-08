@@ -12,4 +12,5 @@ import {
 
 export default {
   roomCode: __t.string(),
+  shuffleSeed: __t.string(),
 };

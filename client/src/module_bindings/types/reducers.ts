@@ -8,19 +8,27 @@ import { type Infer as __Infer } from "spacetimedb";
 // Import all reducer arg schemas
 import BuzzInReducer from "../buzz_in_reducer";
 import CreateRoomReducer from "../create_room_reducer";
+import EndGameReducer from "../end_game_reducer";
 import GuessTimeoutReducer from "../guess_timeout_reducer";
+import HostHeartbeatReducer from "../host_heartbeat_reducer";
+import JoinPublicRoomReducer from "../join_public_room_reducer";
 import JoinRoomReducer from "../join_room_reducer";
 import NextRoundReducer from "../next_round_reducer";
 import SongEndedReducer from "../song_ended_reducer";
 import StartGameReducer from "../start_game_reducer";
 import SubmitGuessReducer from "../submit_guess_reducer";
+import VoteSkipReducer from "../vote_skip_reducer";
 
 export type BuzzInParams = __Infer<typeof BuzzInReducer>;
 export type CreateRoomParams = __Infer<typeof CreateRoomReducer>;
+export type EndGameParams = __Infer<typeof EndGameReducer>;
 export type GuessTimeoutParams = __Infer<typeof GuessTimeoutReducer>;
+export type HostHeartbeatParams = __Infer<typeof HostHeartbeatReducer>;
+export type JoinPublicRoomParams = __Infer<typeof JoinPublicRoomReducer>;
 export type JoinRoomParams = __Infer<typeof JoinRoomReducer>;
 export type NextRoundParams = __Infer<typeof NextRoundReducer>;
 export type SongEndedParams = __Infer<typeof SongEndedReducer>;
 export type StartGameParams = __Infer<typeof StartGameReducer>;
 export type SubmitGuessParams = __Infer<typeof SubmitGuessReducer>;
+export type VoteSkipParams = __Infer<typeof VoteSkipReducer>;
 
