@@ -759,13 +759,20 @@ fn expire_guess(ctx: &ReducerContext, room_code: &str) -> Result<(), String> {
         .find(identity)
         .ok_or_else(|| "Buzzing player not found".to_string())?;
     let player_name = player.name.clone();
+    let score = adjust_score(&mut player, -1)?;
+    let eliminated = score <= -3;
+    player.eliminated = eliminated;
     player.locked_out_this_round = true;
     ctx.db.player().identity().update(player);
 
     state.locked_by = None;
     state.locked_by_name = None;
     state.buzz_timestamp = None;
-    state.last_guess_result = Some("TIMEOUT".to_string());
+    state.last_guess_result = Some(if eliminated {
+        "TIMEOUT_ELIMINATED".to_string()
+    } else {
+        "TIMEOUT".to_string()
+    });
     state.last_guess_player_name = Some(player_name);
     state.guess_result_sequence = state.guess_result_sequence.wrapping_add(1);
     ctx.db.round_state().room_code().update(state);
@@ -775,6 +782,7 @@ fn expire_guess(ctx: &ReducerContext, room_code: &str) -> Result<(), String> {
         ..room
     };
     ctx.db.room().code().update(updated_room);
+    end_game_if_no_active_players(ctx, room_code)?;
     Ok(())
 }
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-type GuessResult = 'CORRECT' | 'WRONG' | 'TIMEOUT' | 'ELIMINATED' | null;
+type GuessResult = 'CORRECT' | 'WRONG' | 'TIMEOUT' | 'ELIMINATED' | 'TIMEOUT_ELIMINATED' | null;
 type Props = {
   roomCode: string;
   round: number;
@@ -14,7 +14,7 @@ type VisibleResult = Exclude<GuessResult, null>;
 export default function GuessResultOverlay({ roomCode, round, result, playerName, sequence }: Props) {
   const [visibleResult, setVisibleResult] = useState<VisibleResult | null>(null);
   const [visiblePlayerName, setVisiblePlayerName] = useState('');
-  const recognizedResult: GuessResult = result === 'CORRECT' || result === 'WRONG' || result === 'TIMEOUT' || result === 'ELIMINATED' ? result : null;
+  const recognizedResult: GuessResult = result === 'CORRECT' || result === 'WRONG' || result === 'TIMEOUT' || result === 'ELIMINATED' || result === 'TIMEOUT_ELIMINATED' ? result : null;
 
   useEffect(() => {
     if (!recognizedResult || sequence === 0) {
@@ -34,8 +34,9 @@ export default function GuessResultOverlay({ roomCode, round, result, playerName
   const content = {
     CORRECT: { icon: '🎉', title: 'Correct!', detail: `${visiblePlayerName} earned a point.` },
     WRONG: { icon: '🙀', title: 'Not quite', detail: `${visiblePlayerName} loses a point.` },
-    TIMEOUT: { icon: '⏰', title: "Time's up", detail: `${visiblePlayerName} ran out of time.` },
+    TIMEOUT: { icon: '⏰', title: "Time's up", detail: `${visiblePlayerName} ran out of time and loses a point.` },
     ELIMINATED: { icon: '🚫', title: 'Out of the game', detail: `${visiblePlayerName} reached −3 points and is eliminated.` },
+    TIMEOUT_ELIMINATED: { icon: '🚫', title: 'Out of the game', detail: `${visiblePlayerName} timed out, lost a point, and reached −3.` },
   }[visibleResult];
 
   return (

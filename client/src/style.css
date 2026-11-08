@@ -1588,7 +1588,8 @@ button:disabled {
 
 .guess-result-correct { --result-accent: #a9f36e; }
 .guess-result-wrong { --result-accent: #ff8a9d; }
-.guess-result-eliminated { --result-accent: #ff6b7d; }
+.guess-result-eliminated,
+.guess-result-timeout_eliminated { --result-accent: #ff6b7d; }
 .guess-result-timeout { --result-accent: #ffd76d; }
 
 .guess-result-icon {

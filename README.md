@@ -95,11 +95,11 @@ npm run dev
 
 Open `http://localhost:5173/`. Choose **Host a room** on the display, enter a display name and the points needed to win (1–100, default 3), choose whether the room is private or public, select a song list, and create it. Private rooms are joined by code; public rooms appear in the live public-games list. The host is added as a player and can buzz in from the host display. Start the game when everyone is in the lobby. The Nursery Rhymes list uses one selected recording per rhyme; many versions sound alike, and short previews can be generic or uneven.
 
-Each game uses a shuffled catalog deck, so songs are random and do not repeat until the catalog has cycled. Players have 15 seconds to submit a guess after buzzing in. Host and player screens show whether each guess was correct, wrong, or timed out. Song details and artwork are revealed on both screens when the preview ends or a correct guess is submitted, then the next round starts automatically after a five-second reveal.
+Each game uses a shuffled catalog deck, so songs are random and do not repeat until the catalog has cycled. Players have 15 seconds to submit a guess after buzzing in. A wrong guess or timeout costs one point; reaching −3 eliminates the player. Host and player screens show whether each guess was correct, wrong, or timed out. Song details and artwork are revealed on both screens when the preview ends or a correct guess is submitted, then the next round starts automatically after a five-second reveal.
 
 Players can vote to skip an active song; the round ends and reveals the track once every online player in the room has voted. A disconnected player's vote is not required, and the remaining online vote count is rechecked when a player disconnects.
 
-An incorrect guess deducts one point (scores can go negative); reaching −3 points eliminates a player from buzzer and skip play for that room. The game ends without a winner when no active players remain. The Quit button removes a player from the room, or deletes the room when used by its host, then returns them home. Three or more consecutive correct guesses display a fire marker by the player's name.
+Wrong guesses and timeouts deduct one point (scores can go negative); reaching −3 points eliminates a player from buzzer and skip play for that room. The game ends without a winner when no active players remain. The Quit button removes a player from the room, or deletes the room when used by its host, then returns them home. Three or more consecutive correct guesses display a fire marker by the player's name.
 
 Both services bind to the local machine by default. Connecting from a phone or another computer requires configuring network access separately.
 

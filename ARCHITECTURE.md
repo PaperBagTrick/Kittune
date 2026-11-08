@@ -111,7 +111,7 @@ Reducers in `lib.rs` are transactional server operations. They validate the call
 | `create_room`, `create_room_with_catalog`, `join_room`, `join_public_room`, `quit_room` | Create rooms (the legacy reducer defaults to Top 1000; the host UI calls the catalog-aware reducer), add players, or leave a room. A host leaving removes the room and its game data. |
 | `host_heartbeat`, `cleanup_stale_rooms` | Keep host activity current and remove abandoned rooms. |
 | `start_game`, `next_round`, `song_ended`, `end_game` | Start/progress/end games and reveal tracks at the right time. |
-| `buzz_in`, `submit_guess`, `guess_timeout` | Enforce buzzer ownership, validate guesses, update scores/lockouts, eliminate players at −3, end the game if no active players remain, and handle the guess timer. |
+| `buzz_in`, `submit_guess`, `guess_timeout` | Enforce buzzer ownership, validate guesses, apply the −1 penalty for wrong guesses and timeouts, update lockouts, eliminate players at −3, end the game if no active players remain, and handle the guess timer. |
 | `vote_skip` | Record a player's skip vote and end the round once all online players have voted. |
 
 Private helpers in the same file register bundled catalogs and their membership rows idempotently, shuffle only the selected room catalog, and handle room authorization, scoring, round-song setup, and skip/guess resolution. `room.catalog_id` is appended with a `top-1000` default so existing rooms retain their original list after a compatible publish. Add future lists as JSON seed files and entries in the module's bundled catalog registry; keep reusable track metadata in `catalog_song` and list membership in `song_catalog_entry`.
