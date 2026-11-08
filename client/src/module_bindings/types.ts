@@ -24,7 +24,8 @@ export const Player = __t.object("Player", {
   identity: __t.identity(),
   roomCode: __t.string(),
   name: __t.string(),
-  score: __t.u32(),
+  score: __t.i32(),
+  correctStreak: __t.u32(),
   lockedOutThisRound: __t.bool(),
 });
 export type Player = __Infer<typeof Player>;
@@ -50,6 +51,19 @@ export const RoundState = __t.object("RoundState", {
   revealedArtistName: __t.option(__t.string()),
 });
 export type RoundState = __Infer<typeof RoundState>;
+
+export const SkipVote = __t.object("SkipVote", {
+  identity: __t.identity(),
+  roomCode: __t.string(),
+  round: __t.u32(),
+});
+export type SkipVote = __Infer<typeof SkipVote>;
+
+export const SongOrder = __t.object("SongOrder", {
+  roomCode: __t.string(),
+  trackIds: __t.array(__t.i64()),
+});
+export type SongOrder = __Infer<typeof SongOrder>;
 
 export const SongSecret = __t.object("SongSecret", {
   id: __t.u32(),

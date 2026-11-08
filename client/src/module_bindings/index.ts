@@ -42,6 +42,7 @@ import NextRoundReducer from "./next_round_reducer";
 import SongEndedReducer from "./song_ended_reducer";
 import StartGameReducer from "./start_game_reducer";
 import SubmitGuessReducer from "./submit_guess_reducer";
+import VoteSkipReducer from "./vote_skip_reducer";
 
 // Import all procedure arg schemas
 
@@ -49,6 +50,7 @@ import SubmitGuessReducer from "./submit_guess_reducer";
 import PlayerRow from "./player_table";
 import RoomRow from "./room_table";
 import RoundStateRow from "./round_state_table";
+import SkipVoteRow from "./skip_vote_table";
 
 /** Type-only namespace exports for generated type groups. */
 
@@ -90,6 +92,20 @@ const tablesSchema = __schema({
       { name: 'round_state_room_code_key', constraint: 'unique', columns: ['roomCode'] },
     ],
   }, RoundStateRow),
+  skipVote: __table({
+    name: 'skip_vote',
+    indexes: [
+      { accessor: 'identity', name: 'skip_vote_identity_idx_btree', algorithm: 'btree', columns: [
+        'identity',
+      ] },
+      { accessor: 'room_code', name: 'skip_vote_room_code_idx_btree', algorithm: 'btree', columns: [
+        'roomCode',
+      ] },
+    ],
+    constraints: [
+      { name: 'skip_vote_identity_key', constraint: 'unique', columns: ['identity'] },
+    ],
+  }, SkipVoteRow),
 });
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
@@ -102,6 +118,7 @@ const reducersSchema = __reducers(
   __reducerSchema("song_ended", SongEndedReducer),
   __reducerSchema("start_game", StartGameReducer),
   __reducerSchema("submit_guess", SubmitGuessReducer),
+  __reducerSchema("vote_skip", VoteSkipReducer),
 );
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */
@@ -112,6 +129,8 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
   tables: typeof tablesSchema.schemaType.tables & {
     /** @deprecated Use `roundState` instead. This alias will be removed in the next major version. */
     readonly "round_state": Omit<typeof tablesSchema.schemaType.tables["roundState"], "accessorName"> & { readonly accessorName: "round_state" };
+    /** @deprecated Use `skipVote` instead. This alias will be removed in the next major version. */
+    readonly "skip_vote": Omit<typeof tablesSchema.schemaType.tables["skipVote"], "accessorName"> & { readonly accessorName: "skip_vote" };
   };
 };
 
@@ -131,6 +150,7 @@ const REMOTE_MODULE = {
 
 const tableAccessorAliases = {
   "round_state": "roundState",
+  "skip_vote": "skipVote",
 } as const;
 
 function __withTableAccessorAliases<T extends object>(target: T, freeze = false): T {
@@ -153,12 +173,16 @@ type __DbViewBase = __DbConnectionImpl<typeof REMOTE_MODULE>["db"];
 export type DbView = __DbViewBase & {
   /** @deprecated Use `roundState` instead. This alias will be removed in the next major version. */
   readonly "round_state": __DbViewBase["roundState"];
+  /** @deprecated Use `skipVote` instead. This alias will be removed in the next major version. */
+  readonly "skip_vote": __DbViewBase["skipVote"];
 };
 
 type __TablesBase = __QueryBuilder<typeof tablesSchema.schemaType>;
 export type Tables = __TablesBase & {
   /** @deprecated Use `roundState` instead. This alias will be removed in the next major version. */
   readonly "round_state": __TablesBase["roundState"];
+  /** @deprecated Use `skipVote` instead. This alias will be removed in the next major version. */
+  readonly "skip_vote": __TablesBase["skipVote"];
 };
 
 /** The tables available in this remote SpacetimeDB module. Each table reference doubles as a query builder. */

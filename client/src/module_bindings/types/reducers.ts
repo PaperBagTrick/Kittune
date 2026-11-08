@@ -14,6 +14,7 @@ import NextRoundReducer from "../next_round_reducer";
 import SongEndedReducer from "../song_ended_reducer";
 import StartGameReducer from "../start_game_reducer";
 import SubmitGuessReducer from "../submit_guess_reducer";
+import VoteSkipReducer from "../vote_skip_reducer";
 
 export type BuzzInParams = __Infer<typeof BuzzInReducer>;
 export type CreateRoomParams = __Infer<typeof CreateRoomReducer>;
@@ -23,4 +24,5 @@ export type NextRoundParams = __Infer<typeof NextRoundReducer>;
 export type SongEndedParams = __Infer<typeof SongEndedReducer>;
 export type StartGameParams = __Infer<typeof StartGameReducer>;
 export type SubmitGuessParams = __Infer<typeof SubmitGuessReducer>;
+export type VoteSkipParams = __Infer<typeof VoteSkipReducer>;
 

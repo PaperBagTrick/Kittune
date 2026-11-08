@@ -21,8 +21,8 @@ export default function App() {
         <span>KITTUNE</span>
       </header>
       <section className="hero-copy">
-        <p className="eyebrow">THE MUSIC GAME WITH CLAWS</p>
-        <h1>Hear it.<br /><span>Know it.</span><br />Paw the buzzer.</h1>
+        <p className="eyebrow">Multiplayer MUSIC GAME</p>
+        <h1>Hear it,<br /><span>Recognize it,</span><br />Paw the buzzer!</h1>
         <p className="hero-note">A little music, a lot of friendly competition.</p>
         <div className="entry-cards">
           <button className="entry-card entry-host" onClick={() => setScreen('host')}>

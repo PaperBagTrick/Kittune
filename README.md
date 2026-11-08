@@ -35,7 +35,13 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:5173/`. Choose **Host a room** on the display, then use a separate browser profile or incognito window on the same computer to join with the room code. Start the game after the player appears in the lobby.
+Open `http://localhost:5173/`. Choose **Host a room** on the display, enter a display name and the points needed to win (1–100, default 5), and create the room. The host is added as a player and can buzz in from the host display; other players can join with the room code from their phones or another browser. Start the game when everyone is in the lobby.
+
+Each game uses a shuffled catalog deck, so songs are random and do not repeat until the catalog has cycled. Players have 10 seconds to submit a guess after buzzing in. Song details and artwork are revealed on both the host display and player screens when the preview ends or a correct guess is submitted, then the next round starts automatically after a five-second reveal.
+
+Players can vote to skip an active song; the round ends and reveals the track once every player in the room has voted.
+
+An incorrect guess deducts one point (scores can go negative). Three or more consecutive correct guesses display a fire marker by the player's name.
 
 Both services bind to the local machine by default. Connecting from a phone or another computer requires configuring network access separately.
 

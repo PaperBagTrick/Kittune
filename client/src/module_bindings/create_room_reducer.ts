@@ -13,4 +13,5 @@ import {
 export default {
   code: __t.string(),
   targetScore: __t.u32(),
+  hostName: __t.string(),
 };
