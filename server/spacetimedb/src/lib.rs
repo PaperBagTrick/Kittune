@@ -1,5 +1,6 @@
 use serde::Deserialize;
-use spacetimedb::{Identity, ReducerContext, Table, TimeDuration, Timestamp};
+use spacetimedb::{AnonymousViewContext, Identity, ReducerContext, ScheduleAt, SpacetimeType, Table, TimeDuration, Timestamp, ViewContext};
+use std::time::Duration;
 
 const STATUS_LOBBY: &str = "LOBBY";
 const STATUS_PLAYING: &str = "PLAYING";
@@ -7,19 +8,33 @@ const STATUS_PAUSED: &str = "PAUSED_FOR_GUESS";
 const STATUS_ROUND_OVER: &str = "ROUND_OVER";
 const STATUS_GAME_OVER: &str = "GAME_OVER";
 const GUESS_WINDOW_MICROS: i64 = 5_000_000;
+const DEFAULT_MAX_PLAYERS: u32 = 8;
+const MIN_MAX_PLAYERS: u32 = 2;
+const MAX_MAX_PLAYERS: u32 = 12;
+const HOST_STALE_MICROS: i64 = 300_000_000;
 
-#[spacetimedb::table(accessor = room, public)]
+#[spacetimedb::table(accessor = room)]
 pub struct Room {
     #[primary_key]
     pub code: String,
+    #[index(btree)]
     pub host_identity: Identity,
     pub status: String,
     pub target_score: u32,
     pub current_round: u32,
     pub winner_name: Option<String>,
+    #[default("PRIVATE")]
+    #[index(btree)]
+    pub visibility: String,
+    #[default(8)]
+    pub max_players: u32,
+    #[default(None)]
+    pub created_at: Option<Timestamp>,
+    #[default(None)]
+    pub last_host_seen: Option<Timestamp>,
 }
 
-#[spacetimedb::table(accessor = player, public)]
+#[spacetimedb::table(accessor = player)]
 pub struct Player {
     #[primary_key]
     pub identity: Identity,
@@ -30,7 +45,7 @@ pub struct Player {
     pub locked_out_this_round: bool,
 }
 
-#[spacetimedb::table(accessor = round_state, public)]
+#[spacetimedb::table(accessor = round_state)]
 pub struct RoundState {
     #[primary_key]
     pub room_code: String,
@@ -43,6 +58,53 @@ pub struct RoundState {
     pub revealed_track_name: Option<String>,
     #[default(None)]
     pub revealed_artist_name: Option<String>,
+}
+
+#[derive(SpacetimeType)]
+pub struct PublicLobby {
+    pub code: String,
+    pub player_count: u32,
+    pub max_players: u32,
+    pub target_score: u32,
+    pub created_at: Option<Timestamp>,
+}
+
+#[derive(SpacetimeType)]
+pub struct RoomView {
+    pub code: String,
+    pub host_identity: Identity,
+    pub status: String,
+    pub visibility: String,
+    pub max_players: u32,
+    pub target_score: u32,
+    pub current_round: u32,
+    pub winner_name: Option<String>,
+}
+
+#[derive(SpacetimeType)]
+pub struct RoundView {
+    pub room_code: String,
+    pub artwork_url: String,
+    pub locked_by: Option<Identity>,
+    pub locked_by_name: Option<String>,
+    pub buzz_timestamp: Option<Timestamp>,
+    pub revealed_track_name: Option<String>,
+    pub revealed_artist_name: Option<String>,
+}
+
+#[derive(SpacetimeType)]
+pub struct HostRoundAudio {
+    pub room_code: String,
+    pub audio_url: String,
+    pub track_id: i64,
+}
+
+#[spacetimedb::table(accessor = room_cleanup_timer, scheduled(cleanup_stale_rooms))]
+pub struct RoomCleanupTimer {
+    #[primary_key]
+    #[auto_inc]
+    pub scheduled_id: u64,
+    pub scheduled_at: ScheduleAt,
 }
 
 // Private by default: neither secrets nor the catalog can be subscribed to by clients.
@@ -78,6 +140,136 @@ struct SeedSong {
     artist_name: String,
     preview_url: String,
     artwork_url: String,
+}
+
+fn room_for_sender(ctx: &ViewContext) -> Option<Room> {
+    if let Some(player) = ctx.db.player().identity().find(ctx.sender()) {
+        return ctx.db.room().code().find(player.room_code);
+    }
+    ctx.db.room().host_identity().filter(ctx.sender()).next()
+}
+
+#[spacetimedb::view(accessor = public_lobbies, public, primary_key = code)]
+pub fn public_lobbies(ctx: &AnonymousViewContext) -> Vec<PublicLobby> {
+    let public_visibility = "PUBLIC".to_string();
+    ctx.db
+        .room()
+        .visibility()
+        .filter(&public_visibility)
+        .filter(|room| room.status == STATUS_LOBBY)
+        .filter_map(|room| {
+            let player_count = ctx.db.player().room_code().filter(&room.code).count() as u32;
+            (player_count < room.max_players).then_some(PublicLobby {
+                code: room.code,
+                player_count,
+                max_players: room.max_players,
+                target_score: room.target_score,
+                created_at: room.created_at,
+            })
+        })
+        .collect()
+}
+
+#[spacetimedb::view(accessor = my_room, public, primary_key = code)]
+pub fn my_room(ctx: &ViewContext) -> Vec<RoomView> {
+    room_for_sender(ctx)
+        .map(|room| vec![RoomView {
+            code: room.code,
+            host_identity: room.host_identity,
+            status: room.status,
+            visibility: room.visibility,
+            max_players: room.max_players,
+            target_score: room.target_score,
+            current_round: room.current_round,
+            winner_name: room.winner_name,
+        }])
+        .unwrap_or_default()
+}
+
+#[spacetimedb::view(accessor = players_in_my_room, public, primary_key = identity)]
+pub fn players_in_my_room(ctx: &ViewContext) -> Vec<Player> {
+    room_for_sender(ctx)
+        .map(|room| ctx.db.player().room_code().filter(&room.code).collect())
+        .unwrap_or_default()
+}
+
+#[spacetimedb::view(accessor = round_state_for_my_room, public, primary_key = room_code)]
+pub fn round_state_for_my_room(ctx: &ViewContext) -> Vec<RoundView> {
+    let Some(room) = room_for_sender(ctx) else {
+        return Vec::new();
+    };
+    let Some(state) = ctx.db.round_state().room_code().find(room.code.clone()) else {
+        return Vec::new();
+    };
+    let reveal_answer = matches!(room.status.as_str(), STATUS_ROUND_OVER | STATUS_GAME_OVER);
+    vec![RoundView {
+        room_code: state.room_code,
+        artwork_url: state.artwork_url,
+        locked_by: state.locked_by,
+        locked_by_name: state.locked_by_name,
+        buzz_timestamp: state.buzz_timestamp,
+        revealed_track_name: reveal_answer.then_some(state.revealed_track_name).flatten(),
+        revealed_artist_name: reveal_answer.then_some(state.revealed_artist_name).flatten(),
+    }]
+}
+
+#[spacetimedb::view(accessor = host_round_audio, public, primary_key = room_code)]
+pub fn host_round_audio(ctx: &ViewContext) -> Vec<HostRoundAudio> {
+    ctx.db
+        .room()
+        .host_identity()
+        .filter(ctx.sender())
+        .filter_map(|room| {
+            ctx.db.round_state().room_code().find(room.code.clone()).map(|state| HostRoundAudio {
+                room_code: room.code.clone(),
+                audio_url: state.audio_url,
+                track_id: ctx.db.song_secret().room_code().filter(&room.code).next().map(|song| song.track_id).unwrap_or_default(),
+            })
+        })
+        .collect()
+}
+
+fn delete_room_data(ctx: &ReducerContext, room_code: &str) {
+    let code = room_code.to_string();
+    let players: Vec<Player> = ctx.db.player().room_code().filter(&code).collect();
+    for player in players {
+        ctx.db.player().identity().delete(player.identity);
+    }
+    ctx.db.round_state().room_code().delete(code.clone());
+    ctx.db.song_secret().room_code().delete(&code);
+    ctx.db.room().code().delete(code);
+}
+
+fn join_room_as(ctx: &ReducerContext, code: String, name: String, visibility: &str) -> Result<(), String> {
+    let room = ctx.db.room().code().find(code.clone()).ok_or_else(|| "Room not found".to_string())?;
+    if room.visibility != visibility {
+        return Err(if visibility == "PUBLIC" { "That public game is no longer available" } else { "Use the public games list to join this room" }.into());
+    }
+    if room.status != STATUS_LOBBY {
+        return Err("This room has already started".into());
+    }
+    let name = name.trim();
+    if name.is_empty() || name.chars().count() > 24 {
+        return Err("Player name must be between 1 and 24 characters".into());
+    }
+    if ctx.db.player().identity().find(ctx.sender()).is_some() {
+        return Err("Leave your current game before joining another".into());
+    }
+    if ctx.db.room().host_identity().filter(ctx.sender()).next().is_some() {
+        return Err("Leave your current hosted game before joining another".into());
+    }
+    let player_count = ctx.db.player().room_code().filter(&code).count() as u32;
+    if player_count >= room.max_players {
+        return Err("This game is full".into());
+    }
+    ctx.db.player().insert(Player {
+        identity: ctx.sender(),
+        room_code: code,
+        name: name.to_string(),
+        score: 0,
+        locked_out_this_round: false,
+    });
+    Ok(())
 }
 
 fn ensure_catalog(ctx: &ReducerContext) -> Result<(), String> {
@@ -195,16 +387,36 @@ fn expire_guess(ctx: &ReducerContext, room_code: &str) -> Result<(), String> {
 
 #[spacetimedb::reducer(init)]
 pub fn init(ctx: &ReducerContext) -> Result<(), String> {
-    ensure_catalog(ctx)
+    ensure_catalog(ctx)?;
+    if ctx.db.room_cleanup_timer().count() == 0 {
+        ctx.db.room_cleanup_timer().insert(RoomCleanupTimer {
+            scheduled_id: 0,
+            scheduled_at: ScheduleAt::Interval(Duration::from_secs(30).into()),
+        });
+    }
+    Ok(())
 }
 
 #[spacetimedb::reducer]
-pub fn create_room(ctx: &ReducerContext, code: String, target_score: u32) -> Result<(), String> {
+pub fn create_room(ctx: &ReducerContext, code: String, target_score: u32, visibility: String, max_players: u32) -> Result<(), String> {
     if code.len() != 4 || !code.bytes().all(|byte| byte.is_ascii_uppercase()) {
         return Err("Room code must be exactly four uppercase letters".into());
     }
     if target_score == 0 || target_score > 100 {
         return Err("Target score must be between 1 and 100".into());
+    }
+    if visibility != "PRIVATE" && visibility != "PUBLIC" {
+        return Err("Room visibility must be PUBLIC or PRIVATE".into());
+    }
+    let max_players = if max_players == 0 { DEFAULT_MAX_PLAYERS } else { max_players };
+    if !(MIN_MAX_PLAYERS..=MAX_MAX_PLAYERS).contains(&max_players) {
+        return Err(format!("Room capacity must be between {MIN_MAX_PLAYERS} and {MAX_MAX_PLAYERS} players"));
+    }
+    if ctx.db.player().identity().find(ctx.sender()).is_some() {
+        return Err("Leave your current game before hosting another".into());
+    }
+    if ctx.db.room().host_identity().filter(ctx.sender()).next().is_some() {
+        return Err("You already host a room. Reopen it or leave it first".into());
     }
     if ctx.db.room().code().find(code.clone()).is_some() {
         return Err("That room code is already in use".into());
@@ -213,39 +425,69 @@ pub fn create_room(ctx: &ReducerContext, code: String, target_score: u32) -> Res
         code,
         host_identity: ctx.sender(),
         status: STATUS_LOBBY.to_string(),
+        visibility,
+        max_players,
         target_score,
         current_round: 0,
         winner_name: None,
+        created_at: Some(ctx.timestamp),
+        last_host_seen: Some(ctx.timestamp),
     });
     Ok(())
 }
 
 #[spacetimedb::reducer]
 pub fn join_room(ctx: &ReducerContext, code: String, name: String) -> Result<(), String> {
-    let room = ctx
-        .db
-        .room()
-        .code()
-        .find(code.clone())
-        .ok_or_else(|| "Room not found".to_string())?;
-    if room.status != STATUS_LOBBY {
-        return Err("This room has already started".into());
-    }
-    let name = name.trim();
-    if name.is_empty() || name.chars().count() > 24 {
-        return Err("Player name must be between 1 and 24 characters".into());
-    }
-    if ctx.db.player().identity().find(ctx.sender()).is_some() {
-        return Err("This identity has already joined a room".into());
-    }
-    ctx.db.player().insert(Player {
-        identity: ctx.sender(),
-        room_code: code,
-        name: name.to_string(),
-        score: 0,
-        locked_out_this_round: false,
-    });
+    join_room_as(ctx, code, name, "PRIVATE")
+}
+
+#[spacetimedb::reducer]
+pub fn join_public_room(ctx: &ReducerContext, code: String, name: String) -> Result<(), String> {
+    join_room_as(ctx, code, name, "PUBLIC")
+}
+
+#[spacetimedb::reducer]
+pub fn host_heartbeat(ctx: &ReducerContext, room_code: String) -> Result<(), String> {
+    let mut room = ctx.db.room().code().find(room_code).ok_or_else(|| "Room not found".to_string())?;
+    require_host(ctx, &room)?;
+    room.last_host_seen = Some(ctx.timestamp);
+    ctx.db.room().code().update(room);
     Ok(())
+}
+
+#[spacetimedb::reducer]
+pub fn leave_room(ctx: &ReducerContext, room_code: String) -> Result<(), String> {
+    let room = ctx.db.room().code().find(room_code.clone()).ok_or_else(|| "Room not found".to_string())?;
+    if room.host_identity == ctx.sender() {
+        delete_room_data(ctx, &room_code);
+        return Ok(());
+    }
+    let player = ctx.db.player().identity().find(ctx.sender()).ok_or_else(|| "You are not in this room".to_string())?;
+    if player.room_code != room_code {
+        return Err("You are not in this room".into());
+    }
+    ctx.db.player().identity().delete(ctx.sender());
+    Ok(())
+}
+
+#[spacetimedb::reducer]
+pub fn cleanup_stale_rooms(ctx: &ReducerContext, _timer: RoomCleanupTimer) {
+    let now = ctx.timestamp;
+    let mut stale_rooms = Vec::new();
+    for mut room in ctx.db.room().iter() {
+        if let Some(last_seen) = room.last_host_seen {
+            if last_seen + TimeDuration::from_micros(HOST_STALE_MICROS) < now {
+                stale_rooms.push(room.code);
+            }
+        } else {
+            // Give rooms created before heartbeat support one grace window to reconnect.
+            room.last_host_seen = Some(now);
+            ctx.db.room().code().update(room);
+        }
+    }
+    for code in stale_rooms {
+        delete_room_data(ctx, &code);
+    }
 }
 
 #[spacetimedb::reducer]
@@ -340,6 +582,9 @@ pub fn submit_guess(ctx: &ReducerContext, room_code: String, guessed_track_id: i
         .identity()
         .find(ctx.sender())
         .ok_or_else(|| "Player not found".to_string())?;
+    if player.room_code != room_code {
+        return Err("You are not a member of this room".into());
+    }
     let secret = ctx
         .db
         .song_secret()
@@ -387,6 +632,9 @@ pub fn guess_timeout(ctx: &ReducerContext, room_code: String) -> Result<(), Stri
         .room_code()
         .find(room_code.clone())
         .ok_or_else(|| "Round state not found".to_string())?;
+    if state.locked_by != Some(ctx.sender()) {
+        return Err("Only the player with the buzzer can end the guess timer".into());
+    }
     let started_at = state.buzz_timestamp.ok_or_else(|| "Guess timer is missing".to_string())?;
     if ctx.timestamp < started_at + TimeDuration::from_micros(GUESS_WINDOW_MICROS) {
         return Err("The five-second guess window has not expired".into());
@@ -448,6 +696,34 @@ pub fn next_round(ctx: &ReducerContext, room_code: String) -> Result<(), String>
     ctx.db.room().code().update(Room {
         status: STATUS_PLAYING.to_string(),
         current_round: next,
+        ..room
+    });
+    Ok(())
+}
+
+#[spacetimedb::reducer]
+pub fn end_game(ctx: &ReducerContext, room_code: String) -> Result<(), String> {
+    let room = ctx
+        .db
+        .room()
+        .code()
+        .find(room_code.clone())
+        .ok_or_else(|| "Room not found".to_string())?;
+    require_host(ctx, &room)?;
+    if room.status == STATUS_GAME_OVER {
+        return Err("The game has already ended".into());
+    }
+
+    let mut players: Vec<Player> = ctx.db.player().room_code().filter(&room_code).collect();
+    players.sort_by(|a, b| b.score.cmp(&a.score).then_with(|| a.name.cmp(&b.name)));
+    let winner_name = players.first().and_then(|leader| {
+        let has_unique_lead = players.get(1).is_none_or(|runner_up| runner_up.score < leader.score);
+        (leader.score > 0 && has_unique_lead).then(|| leader.name.clone())
+    });
+
+    ctx.db.room().code().update(Room {
+        status: STATUS_GAME_OVER.to_string(),
+        winner_name,
         ..room
     });
     Ok(())
